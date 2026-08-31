@@ -1,0 +1,11 @@
+{
+  "name": "mountainpulse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time mountain intelligence for skiers",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check mountain-data.js && node --check data-platform.js && node --check adapters/scenario-adapter.js && node --check scoring.js && node --check route-engine.js && node --check safety-engine.js && node --check parking-model.js && node --check app.js && node --check server.js && node --check service-worker.js",
+    "test": "node test.js"
+  }
+}

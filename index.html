@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#081411" />
+    <meta name="description" content="MountainPulse — live mountain intelligence for skiers." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>MountainPulse — Know the mountain.</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="MountainPulse home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+        <span>Mountain<span>Pulse</span></span>
+      </a>
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <a class="active" href="#live">Live mountain</a>
+        <a href="#radar">Powder radar</a>
+        <a href="#parking">Parking</a>
+        <a href="#outlook">Trip outlook</a>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-btn" id="locationButton" aria-label="Center on my location">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.1 7-12a7 7 0 1 0-14 0c0 6.9 7 12 7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        </button>
+        <button class="avatar" aria-label="Open profile">AK</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="live">
+        <div class="hero-heading">
+          <div>
+            <button class="resort-picker" id="resortPicker" aria-expanded="false" aria-haspopup="menu" aria-controls="resortMenu">
+              <span id="resortName">Copper Mountain</span>
+              <svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
+            </button>
+            <div class="resort-menu" id="resortMenu" role="menu"></div>
+            <div class="live-line"><span class="live-dot demo-dot"></span> Interactive winter demo <span>•</span> <span id="updatedTime">Scenario loaded now</span></div>
+          </div>
+          <div class="weather-strip" aria-label="Current weather">
+            <div><span class="weather-icon">❄</span><strong id="temp">18°</strong><small id="feelsLike">Feels 9°</small></div>
+            <div><strong id="snow">7″</strong><small>24h snow</small></div>
+            <div><strong id="wind">W 12</strong><small>mph wind</small></div>
+            <div><strong id="openTerrain">93%</strong><small>terrain open</small></div>
+          </div>
+        </div>
+
+        <div class="pulse-banner">
+          <div class="pulse-score-wrap">
+            <div class="pulse-score" id="pulseScore">83</div>
+            <div><span class="eyebrow">Mountain pulse</span><h1 id="pulseLabel">Excellent right now</h1></div>
+          </div>
+          <div class="pulse-factors" id="pulseFactors"></div>
+          <div class="signal"><span></span><span></span><span></span><span></span></div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="main-column">
+          <article class="best-move card">
+            <div class="card-topline"><span class="eyebrow fire">🔥 Best move right now</span><div class="move-mode-actions"><span class="confidence" id="routeConfidence"><i></i> 78% model confidence</span><button class="lift-mode-button" id="liftModeButton" aria-pressed="false">Lift mode</button></div></div>
+            <div class="preference-bar" aria-label="Recommendation preferences">
+              <label>Ability<select id="abilityPreference"><option value="intermediate">Intermediate</option><option value="advanced" selected>Advanced</option><option value="expert">Expert</option></select></label>
+              <label>Ride<select id="ridePreference"><option value="ski" selected>Skis</option><option value="snowboard">Snowboard</option></select></label>
+              <label>Priority<select id="priorityPreference"><option value="snow" selected>Best snow</option><option value="quiet">Low crowds</option><option value="fast">Fast laps</option></select></label>
+            </div>
+            <div class="change-strip"><strong>Modeled since prior snapshot</strong><div id="changeList"></div></div>
+            <div class="move-content">
+              <div class="route-visual" aria-hidden="true">
+                <span class="route-node start">YOU</span><i></i><span class="route-node">SB</span><i></i><span class="route-node">EX</span><i></i><span class="route-node finish">R</span>
+              </div>
+              <div class="move-copy">
+                <h2 id="moveTitle">Super Bee → Excelerator → Resolution</h2>
+                <p id="moveReason">Fast lifts, cold north-facing snow, and traffic is moving away from the east side.</p>
+                <div class="move-stats">
+                  <span><b id="waitTime">7 min</b> lift waiting</span>
+                  <span><b id="skiTime">31 min</b> skiing</span>
+                  <span><b id="vertical">2,430 ft</b> vertical</span>
+                </div>
+              </div>
+              <div class="route-actions"><button class="route-button" id="routeButton">Start lap <span>→</span></button><button class="alternate-button" id="alternateRoute">Another option</button></div>
+            </div>
+            <div class="avoid-bar"><span>!</span><p><strong id="avoidArea">Avoid Center Village</strong> <span id="avoidReason">for ~45 min — lines are building quickly.</span></p></div>
+            <details class="source-ledger"><summary>Why this recommendation?</summary><div id="sourceLedger"></div></details>
+            <div class="route-feedback" id="routeFeedback" hidden>
+              <div><strong>Was this recommendation worth it?</strong><small id="feedbackRoute"></small></div>
+              <div class="feedback-actions"><button data-rating="nailed">🔥 Nailed it</button><button data-rating="fine">👍 Fine</button><button data-rating="missed">💀 Missed</button></div>
+            </div>
+          </article>
+
+          <article class="mountain-card card" id="radar">
+            <div class="section-heading">
+              <div><span class="eyebrow">Live terrain</span><h2>Mountain heat map</h2></div>
+              <div class="map-legend"><span><i class="hot"></i>Exceptional</span><span><i class="good"></i>Good</span><span><i class="busy"></i>Busy</span><span><i class="poor"></i>Poor</span></div>
+            </div>
+            <div class="mountain-map" id="mountainMap">
+              <div class="contour-lines" aria-hidden="true"></div>
+              <div class="map-label peak">12,313′</div>
+              <div class="map-label basin">RESOLUTION BOWL</div>
+              <div class="map-label east">EAST VILLAGE</div>
+              <div class="map-label center">CENTER VILLAGE</div>
+              <svg class="trail-lines" viewBox="0 0 800 400" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M405 20 C380 110 260 135 180 350"/><path d="M425 25 C445 100 525 150 610 350"/><path d="M390 60 C450 145 410 205 360 360"/><path d="M360 80 C325 170 260 215 255 360"/><path d="M460 80 C500 175 455 240 480 360"/>
+              </svg>
+              <button class="zone hot" style="--x:43%;--y:21%" data-zone="Copper Bowl"><b>🔥</b><span>Copper Bowl<small>94</small></span></button>
+              <button class="zone hot" style="--x:31%;--y:39%" data-zone="Resolution"><b>🔥</b><span>Resolution<small>91</small></span></button>
+              <button class="zone good" style="--x:57%;--y:42%" data-zone="Spaulding"><b>●</b><span>Spaulding<small>82</small></span></button>
+              <button class="zone good" style="--x:22%;--y:61%" data-zone="Super Bee"><b>●</b><span>Super Bee<small>86</small></span></button>
+              <button class="zone busy" style="--x:50%;--y:68%" data-zone="Center Village"><b>●</b><span>Center Village<small>54</small></span></button>
+              <button class="zone poor" style="--x:71%;--y:66%" data-zone="West Village"><b>●</b><span>West Village<small>41</small></span></button>
+              <div class="you-marker" style="--x:25%;--y:78%"><span></span>YOU</div>
+              <div class="zone-popover" id="zonePopover" hidden></div>
+            </div>
+            <div class="map-footer">
+              <span><i class="pulse-dot"></i> <span id="contributorCount">1,284 simulated movement signals</span></span>
+              <button id="refreshMap">Refresh map <span>↻</span></button>
+            </div>
+          </article>
+
+          <article class="conditions card">
+            <div class="section-heading">
+              <div><span class="eyebrow">On-mountain intel</span><h2>What skiers are saying</h2></div>
+              <button class="text-button">See all reports <span>→</span></button>
+            </div>
+            <div class="report-list" id="reportList"></div>
+          </article>
+
+          <article class="powder-card card" id="powder">
+            <div class="section-heading">
+              <div><span class="eyebrow">Right-now snow intelligence</span><h2>Powder probability</h2></div>
+              <span class="model-badge">Simulated model</span>
+            </div>
+            <p class="section-intro">Probability of finding soft, lightly tracked snow now—blending aspect, wind, elevation, traffic, and recent skier signals.</p>
+            <div class="powder-list" id="powderList"></div>
+          </article>
+
+          <article class="outlook card" id="outlook">
+            <div class="section-heading">
+              <div><span class="eyebrow">Denver → mountains</span><h2>Where should we go tomorrow?</h2></div>
+              <span class="forecast-time">Demo for an 8:00 AM arrival</span>
+            </div>
+            <div class="departure-grid" aria-label="I-70 travel forecasts">
+              <div class="recommended"><small>Example: leave 6:00 AM</small><strong>1h 36m</strong><span>Best modeled window</span></div>
+              <div><small>Example: leave 6:30 AM</small><strong>2h 02m</strong><span>+26 min modeled traffic</span></div>
+              <div><small>Example: leave 7:00 AM</small><strong>2h 31m</strong><span>+55 min modeled traffic</span></div>
+            </div>
+            <div class="travel-alert" id="travelAlert"><strong>Demo forecast</strong><span>Connect CDOT incidents, traction laws, and resort reservations before using this for a real drive.</span></div>
+            <label class="reservation-check"><input type="checkbox" id="abasinReservation" /> I have any required A-Basin parking reservation</label>
+            <div class="destination-heading"><strong>MountainPulse recommendation</strong><small>Balanced for snow, arrival, parking, and crowds</small></div>
+            <div class="destination-list" id="destinationList"></div>
+          </article>
+        </div>
+
+        <aside class="side-column">
+          <article class="quick-report card">
+            <span class="eyebrow">Send a live signal</span>
+            <h2>How was that run?</h2>
+            <p>Confirm the zone, then send one fast signal. It stays local offline and syncs to the prototype aggregate when connected.</p>
+            <label class="signal-zone">Run or zone<select id="reportZone"><option value="">Choose a zone</option></select></label>
+            <div class="condition-picker" id="conditionPicker" aria-label="Optional snow condition">
+              <button data-condition="fresh" aria-pressed="false">❄️ Fresh</button><button data-condition="untracked" aria-pressed="false">🔥 Untracked</button>
+              <button data-condition="icy" aria-pressed="false">🧊 Icy</button><button data-condition="thin" aria-pressed="false">🪨 Thin</button>
+              <button data-condition="windblown" aria-pressed="false">🌬 Windblown</button><button data-condition="moguls" aria-pressed="false">🥔 Moguls</button>
+              <button data-condition="trees" aria-pressed="false">🌲 Good trees</button><button data-condition="hazard" aria-pressed="false">⚠️ Hazard</button>
+            </div>
+            <div class="report-actions">
+              <button class="stoke" id="stokeButton"><span>🔥</span><b>This run is sick</b></button>
+              <button class="bother" id="botherButton"><span>💀</span><b>Don’t bother</b></button>
+            </div>
+            <div class="report-success" id="reportSuccess" aria-live="polite"></div>
+          </article>
+
+          <article class="lifts card">
+            <div class="section-heading compact"><div><span class="eyebrow">Simulated operations</span><h2>Lift &amp; run status</h2></div><span class="open-count" id="openCount">9/11 open</span></div>
+            <div class="operation-tabs" role="tablist" aria-label="Mountain operations">
+              <button class="active" role="tab" aria-selected="true" aria-controls="liftList" id="liftTab">Lifts</button>
+              <button role="tab" aria-selected="false" aria-controls="runList" id="runTab">Runs</button>
+            </div>
+            <div class="lift-list" id="liftList"></div>
+            <div class="run-list" id="runList" hidden></div>
+          </article>
+
+          <article class="parking card" id="parking">
+            <div class="section-heading compact"><div><span class="eyebrow">Getting here</span><h2>Parking pulse</h2></div><span class="capacity" id="parkingCapacity">68%</span></div>
+            <div class="parking-meter"><i id="parkingMeter"></i></div>
+            <div class="parking-copy"><span id="parkingLabel">Alpine lot is filling</span><strong id="parkingFull">Full around 10:18</strong><small id="parkingConfidence">58% scenario confidence</small></div>
+            <div class="lot-grid"><div><small id="lotName1">Alpine</small><b id="alpineLot">68%</b></div><div><small id="lotName2">Far East</small><b id="farEastLot">41%</b></div><div><small id="lotName3">Chapel</small><b id="chapelLot">22%</b></div></div>
+            <fieldset class="parking-report"><legend>What do you see?</legend><div><button data-level="Plenty">Plenty</button><button data-level="Filling">Filling</button><button data-level="Almost full">Almost full</button><button data-level="Turn around">Turn around</button></div></fieldset>
+          </article>
+
+          <article class="leaderboard card">
+            <div class="section-heading compact"><div><span class="eyebrow">Colorado demo pulse</span><h2>Best mountains now</h2></div><span class="live-badge"><i></i> Demo</span></div>
+            <div class="leaderboard-list" id="leaderboardList"></div>
+          </article>
+        </aside>
+      </section>
+    </main>
+
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <a class="active" href="#live"><span>⌁</span>Live</a><a href="#radar"><span>◈</span>Radar</a><button id="mobileReport"><span>＋</span>Report</button><a href="#parking"><span>▥</span>Parking</a><a href="#outlook"><span>↗</span>Trip</a>
+    </nav>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="mountain-data.js"></script>
+    <script src="scoring.js"></script>
+    <script src="route-engine.js"></script>
+    <script src="safety-engine.js"></script>
+    <script src="parking-model.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
