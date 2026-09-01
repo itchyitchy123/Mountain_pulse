@@ -22,20 +22,23 @@ class DataPlatform{
   }
 
   ingest(source,observations){
+    if(!source?.id)throw validationError('source id is required');
+    if(!Array.isArray(observations))throw validationError('observations must be an array');
     const receivedAt=new Date(this.now()).toISOString();
     let accepted=0;
     for(const observation of observations){
       if(!observation?.resortId||!observation?.resource||observation.data===undefined)continue;
-      this.resortIds.add(observation.resortId);
       const observedAt=new Date(observation.observedAt||receivedAt);
       if(Number.isNaN(observedAt.valueOf()))continue;
+      this.resortIds.add(observation.resortId);
       const ttlMs=Math.max(1000,Number(observation.ttlMs)||300000);
       const record={...observation,sourceId:source.id,sourceMode:source.mode||'unknown',observedAt:observedAt.toISOString(),receivedAt,expiresAt:new Date(observedAt.valueOf()+ttlMs).toISOString(),quality:Math.max(0,Math.min(1,Number(observation.quality) || 0))};
       const key=`${record.resortId}:${record.resource}`;
       const current=this.observations.get(key);
       if(!current||current.observedAt<=record.observedAt){this.observations.set(key,record);accepted+=1}
     }
-    this.sources.set(source.id,{id:source.id,label:source.label||source.id,mode:source.mode||'unknown',status:accepted?'healthy':'degraded',lastSuccessAt:accepted?receivedAt:null,lastAttemptAt:receivedAt,acceptedObservations:accepted});
+    const previous=this.sources.get(source.id);
+    this.sources.set(source.id,{id:source.id,label:source.label||source.id,mode:source.mode||'unknown',status:accepted?'healthy':'degraded',lastSuccessAt:accepted?receivedAt:(previous?.lastSuccessAt||null),lastAttemptAt:receivedAt,acceptedObservations:accepted});
     return accepted;
   }
 
@@ -55,9 +58,10 @@ class DataPlatform{
     const now=this.now();
     this.pruneTransientState(now);
     const reporterId=cleanString(input.reporterId,100),resort=cleanString(input.resort,40),zone=cleanString(input.zone,120);
-    const kind=input.kind==='parking'?'parking':'condition';
+    const kind=cleanString(input.kind,20);
     if(!reporterId||!resort||!zone)throw validationError('reporterId, resort, and zone are required');
     if(!this.resortIds.has(resort))throw validationError('unknown resort');
+    if(!['condition','parking'].includes(kind))throw validationError('report kind must be condition or parking');
     if(kind==='condition'&&!['stoke','bother'].includes(input.type))throw validationError('condition report type must be stoke or bother');
     if(input.condition&&!conditionTypes.has(input.condition))throw validationError('unknown condition');
     if(kind==='parking'&&!parkingLevels.has(input.level))throw validationError('unknown parking level');
@@ -69,7 +73,7 @@ class DataPlatform{
     const report={id:randomUUID(),reporterHash,resort,zone,kind,type:kind==='condition'?input.type:null,condition:kind==='condition'?(input.condition||null):null,level:kind==='parking'?input.level:null,observedAt:normalizeClientTime(input.observedAt,now),receivedAt:new Date(now).toISOString()};
     this.reports.push(report);
     this.reports=this.reports.filter(item=>now-new Date(item.observedAt).valueOf()<reportTtlMs).slice(-5000);
-    const aggregate=this.reportAggregates(resort).find(item=>item.zone===zone&&item.kind===kind);
+    const aggregate=this.reportAggregates(resort).find(item=>item.zone===zone&&item.kind===kind&&item.type===report.type&&item.condition===report.condition&&item.level===report.level);
     return {accepted:true,id:report.id,published:Boolean(aggregate),independentReporters:aggregate?.reporterCount||1};
   }
 
@@ -90,7 +94,9 @@ class DataPlatform{
     const resort=cleanString(input.resort,40),route=cleanString(input.route,240),rating=cleanString(input.rating,20);
     if(!resort||!route||!['nailed','fine','missed'].includes(rating))throw validationError('resort, route, and a valid rating are required');
     if(!this.resortIds.has(resort))throw validationError('unknown resort');
-    const outcome={id:randomUUID(),resort,route,destination:cleanString(input.destination,120)||null,rating,confidence:finiteRange(input.confidence,0,100),elapsedMinutes:finiteRange(input.elapsedMinutes,0,720),preferences:safePreferences(input.preferences),completedAt:new Date(this.now()).toISOString()};
+    const confidence=optionalFiniteRange(input.confidence,0,100,'confidence');
+    const elapsedMinutes=optionalFiniteRange(input.elapsedMinutes,0,720,'elapsedMinutes');
+    const outcome={id:randomUUID(),resort,route,destination:cleanString(input.destination,120)||null,rating,confidence,elapsedMinutes,preferences:safePreferences(input.preferences),completedAt:new Date(this.now()).toISOString()};
     this.outcomes.push(outcome);
     this.outcomes=this.outcomes.slice(-10000);
     return {accepted:true,id:outcome.id};
@@ -103,16 +109,19 @@ class DataPlatform{
     const deviceId=cleanString(input.deviceId,120),resort=cleanString(input.resort,40),samples=Array.isArray(input.samples)?input.samples:[];
     if(!deviceId||!resort||!samples.length||samples.length>100)throw validationError('deviceId, resort, and 1-100 aggregate samples are required');
     if(!this.resortIds.has(resort))throw validationError('unknown resort');
-    const deviceHash=createHash('sha256').update(this.movementSalt).update(deviceId).digest('hex');
-    const published=[];
-    let storedSamples=0;
-    for(const sample of samples){
+    const normalizedSamples=samples.map(sample=>{
       if(!sample||typeof sample!=='object'||Array.isArray(sample))throw validationError('movement samples must be objects');
       if(['lat','lon','latitude','longitude','coordinates','geometry'].some(key=>Object.hasOwn(sample,key)))throw validationError('raw coordinates are not accepted; submit edge-level aggregates only');
       const edgeId=cleanString(sample.edgeId,160),window=normalizeWindow(sample.window,now);
       const durationSeconds=finiteRange(sample.durationSeconds,1,7200);
-      if(!edgeId||!window||durationSeconds===null)continue;
-      storedSamples+=1;
+      if(!edgeId||!window||durationSeconds===null)throw validationError('each movement sample requires a valid edgeId, window, and durationSeconds');
+      return {edgeId,window,durationSeconds};
+    });
+    const sampleKeys=new Set(normalizedSamples.map(sample=>`${sample.edgeId}:${sample.window}`));
+    if(sampleKeys.size!==normalizedSamples.length)throw validationError('movement batch contains duplicate edge windows');
+    const deviceHash=createHash('sha256').update(this.movementSalt).update(deviceId).digest('hex');
+    const published=[];
+    for(const {edgeId,window,durationSeconds} of normalizedSamples){
       const key=`${resort}:${edgeId}:${window}`;
       if(!this.movement.has(key))this.movement.set(key,{resort,edgeId,window,devices:new Map()});
       this.movement.get(key).devices.set(deviceHash,durationSeconds);
@@ -124,8 +133,7 @@ class DataPlatform{
         published.push({edgeId,window,deviceCount:durations.length,medianSeconds});
       }
     }
-    if(!storedSamples)throw validationError('no valid aggregate samples');
-    return {accepted:true,storedSamples,published};
+    return {accepted:true,storedSamples:normalizedSamples.length,published};
   }
 
   pruneTransientState(now=this.now()){
@@ -140,9 +148,18 @@ class DataPlatform{
 
 function cleanString(value,max){return typeof value==='string'?value.trim().slice(0,max):''}
 function finiteRange(value,min,max){const number=Number(value);return Number.isFinite(number)&&number>=min&&number<=max?number:null}
+function optionalFiniteRange(value,min,max,name){if(value===undefined||value===null)return null;const number=finiteRange(value,min,max);if(number===null)throw validationError(`${name} must be between ${min} and ${max}`);return number}
 function normalizeClientTime(value,now){const parsed=new Date(value||now);return Number.isNaN(parsed.valueOf())||Math.abs(parsed.valueOf()-now)>86400000?new Date(now).toISOString():parsed.toISOString()}
 function normalizeWindow(value,now){const parsed=new Date(value);if(Number.isNaN(parsed.valueOf())||Math.abs(parsed.valueOf()-now)>86400000)return null;parsed.setUTCSeconds(0,0);return parsed.toISOString()}
-function safePreferences(value={}){return {ability:cleanString(value.ability,20)||null,ride:cleanString(value.ride,20)||null,priority:cleanString(value.priority,20)||null}}
+function safePreferences(value){
+  if(value===undefined||value===null)return {ability:null,ride:null,priority:null};
+  if(typeof value!=='object'||Array.isArray(value))throw validationError('preferences must be an object');
+  const preferences={ability:cleanString(value.ability,20)||null,ride:cleanString(value.ride,20)||null,priority:cleanString(value.priority,20)||null};
+  if(preferences.ability&&!['intermediate','advanced','expert'].includes(preferences.ability))throw validationError('unknown ability preference');
+  if(preferences.ride&&!['ski','snowboard'].includes(preferences.ride))throw validationError('unknown ride preference');
+  if(preferences.priority&&!['snow','quiet','fast'].includes(preferences.priority))throw validationError('unknown priority preference');
+  return preferences;
+}
 function validationError(message){return Object.assign(new Error(message),{statusCode:400,code:'invalid_request'})}
 function rateLimitError(message){return Object.assign(new Error(message),{statusCode:429,code:'rate_limited'})}
 

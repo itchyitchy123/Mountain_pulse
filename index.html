@@ -41,7 +41,7 @@
               <span id="resortName">Copper Mountain</span>
               <svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
             </button>
-            <div class="resort-menu" id="resortMenu" role="menu"></div>
+            <div class="resort-menu" id="resortMenu" role="menu" aria-label="Choose a resort"></div>
             <div class="live-line"><span class="live-dot demo-dot"></span> Interactive winter demo <span>•</span> <span id="updatedTime">Scenario loaded now</span></div>
           </div>
           <div class="weather-strip" aria-label="Current weather">
@@ -180,11 +180,11 @@
           <article class="lifts card">
             <div class="section-heading compact"><div><span class="eyebrow">Simulated operations</span><h2>Lift &amp; run status</h2></div><span class="open-count" id="openCount">9/11 open</span></div>
             <div class="operation-tabs" role="tablist" aria-label="Mountain operations">
-              <button class="active" role="tab" aria-selected="true" aria-controls="liftList" id="liftTab">Lifts</button>
-              <button role="tab" aria-selected="false" aria-controls="runList" id="runTab">Runs</button>
+              <button class="active" role="tab" aria-selected="true" aria-controls="liftList" id="liftTab" tabindex="0">Lifts</button>
+              <button role="tab" aria-selected="false" aria-controls="runList" id="runTab" tabindex="-1">Runs</button>
             </div>
-            <div class="lift-list" id="liftList"></div>
-            <div class="run-list" id="runList" hidden></div>
+            <div class="lift-list" id="liftList" role="tabpanel" aria-labelledby="liftTab"></div>
+            <div class="run-list" id="runList" role="tabpanel" aria-labelledby="runTab" hidden></div>
           </article>
 
           <article class="parking card" id="parking">

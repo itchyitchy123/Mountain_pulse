@@ -1,0 +1,12 @@
+.git
+.github
+.agents
+.codex
+node_modules
+npm-debug.log*
+Dockerfile*
+README.md
+PLAN_STATUS.md
+PRODUCTION_ROADMAP.md
+test.js
+db

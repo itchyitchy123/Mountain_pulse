@@ -7,10 +7,10 @@
 
   function normalizeOperations(rows=[]){
     return rows.map(row=>{
-      if(!Array.isArray(row))return row;
-      const [name,,state]=row;
-      const normalized=String(state).toLowerCase();
-      return {name,status:normalized.includes('closed')?'closed':normalized.includes('hold')?'hold':'open'};
+      const [name,state]=Array.isArray(row)?[row[0],row[2]]:[row?.name,row?.status];
+      const normalized=String(state||'').trim().toLowerCase();
+      const status=normalized==='open'||/^\d+(?:\.\d+)?\s*min(?:ute)?s?$/.test(normalized)?'open':normalized.includes('closed')?'closed':normalized.includes('hold')?'hold':'unknown';
+      return {name:String(name||''),status};
     });
   }
 
@@ -18,7 +18,7 @@
     const indexed=new Map(normalizeOperations(operations).map(operation=>[operation.name.toLowerCase(),operation.status]));
     return (route.requires||[]).flatMap(requirement=>{
       const status=indexed.get(requirement.toLowerCase());
-      if(!status)return [`${requirement}: status unknown`];
+      if(!status||status==='unknown')return [`${requirement}: status unknown`];
       return status!=='open'?[`${requirement}: ${status}`]:[];
     });
   }

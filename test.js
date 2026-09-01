@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const {spawn} = require('node:child_process');
+const {spawn,spawnSync} = require('node:child_process');
 const {once} = require('node:events');
 const {calculateAdjustment} = require('./scoring');
 const {calculateConfidence,rankRoutes,routeBlockers} = require('./route-engine');
@@ -9,8 +9,14 @@ const mountainData = require('./mountain-data');
 const {DataPlatform} = require('./data-platform');
 const {ScenarioAdapter} = require('./adapters/scenario-adapter');
 
-const testPort = 4399;
+const testPort = 20000+Math.floor(Math.random()*40000);
 const child = spawn(process.execPath,['server.js'],{cwd:__dirname,env:{...process.env,PORT:String(testPort)},stdio:['ignore','pipe','pipe']});
+const serverStarted=Promise.race([
+  once(child.stdout,'data'),
+  once(child.stderr,'data').then(([data])=>{throw new Error(data.toString())}),
+  once(child,'exit').then(([code,signal])=>{throw new Error(`Server exited before startup (${code??signal})`)}),
+  new Promise((_,reject)=>setTimeout(()=>reject(new Error('Server did not start')),3000))
+]);
 
 async function get(path,options={}){
   const response=await fetch(`http://127.0.0.1:${testPort}${path}`,options);
@@ -19,6 +25,9 @@ async function get(path,options={}){
 }
 
 async function run(){
+  const invalidConfiguration=spawnSync(process.execPath,['server.js'],{cwd:__dirname,env:{...process.env,PORT:'invalid'},encoding:'utf8'});
+  assert.equal(invalidConfiguration.status,1);
+  assert.match(invalidConfiguration.stderr,/invalid_configuration/);
   const now=Date.now();
   assert.equal(calculateAdjustment([{resort:'copper',zone:'Resolution',type:'stoke',condition:'fresh',observedAt:now}],{resort:'copper',zone:'Resolution',now}),5);
   assert.equal(calculateAdjustment([{reporterId:'same',resort:'copper',zone:'Resolution',type:'stoke',condition:'fresh',observedAt:now-100},{reporterId:'same',resort:'copper',zone:'Resolution',type:'bother',condition:'hazard',observedAt:now}],{resort:'copper',zone:'Resolution',now}),-8);
@@ -34,6 +43,8 @@ async function run(){
   assert.deepEqual(routeBlockers(routeFixtures[1],operationFixtures),['Lift B: closed']);
   assert.deepEqual(routeBlockers(routeFixtures[2],operationFixtures),['Lift C: hold']);
   assert.deepEqual(routeBlockers({requires:['Unreported Lift']},operationFixtures),['Unreported Lift: status unknown']);
+  assert.deepEqual(routeBlockers({requires:['Lift D']},[{name:'Lift D',status:'maintenance'}]),['Lift D: status unknown']);
+  assert.deepEqual(routeBlockers({requires:['Lift D']},[['Lift D','','Unavailable']]),['Lift D: status unknown']);
   assert.deepEqual(rankRoutes(routeFixtures,{ability:'expert',priority:'snow',operations:operationFixtures}).map(route=>route.destination),['Easy']);
   const openOperations=[['Lift A','','3 min'],['Lift B','','3 min'],['Lift C','','3 min']];
   assert.equal(rankRoutes(routeFixtures,{ability:'expert',priority:'snow',operations:openOperations,outcomeAdjustment:route=>route.destination==='Trees'?20:0})[0].destination,'Trees');
@@ -53,8 +64,18 @@ async function run(){
   assert.ok(dataPlatform.ingest(adapter.source,adapter.fetch())>0);
   assert.equal(dataPlatform.snapshot('copper').data.id,'copper');
   assert.equal(dataPlatform.sourceHealth()[0].status,'healthy');
+  const lastSuccessAt=dataPlatform.sourceHealth()[0].lastSuccessAt;
+  assert.equal(dataPlatform.ingest(adapter.source,[{resortId:'copper',resource:'lifts',observedAt:'invalid',data:[]}]),0);
+  assert.equal(dataPlatform.sourceHealth()[0].status,'degraded');
+  assert.equal(dataPlatform.sourceHealth()[0].lastSuccessAt,lastSuccessAt);
+  assert.throws(()=>dataPlatform.ingest({},[]),error=>error.statusCode===400);
+  dataPlatform.ingest({id:'bad-source'},[{resortId:'phantom',resource:'summary',observedAt:'invalid',data:{}}]);
+  assert.equal(dataPlatform.resortIds.has('phantom'),false);
+  dataPlatform.ingest(adapter.source,adapter.fetch());
   assert.equal(dataPlatform.submitReport({reporterId:'one',resort:'copper',zone:'Resolution',kind:'condition',type:'stoke',condition:'fresh',observedAt:fixedNow}).published,false);
   assert.equal(dataPlatform.submitReport({reporterId:'two',resort:'copper',zone:'Resolution',kind:'condition',type:'stoke',condition:'fresh',observedAt:fixedNow}).published,true);
+  assert.equal(dataPlatform.submitReport({reporterId:'three',resort:'copper',zone:'Resolution',kind:'condition',type:'bother',condition:'icy',observedAt:fixedNow}).published,false);
+  assert.throws(()=>dataPlatform.submitReport({reporterId:'wrong-kind',resort:'copper',zone:'Resolution',kind:'hazard',type:'bother',condition:'hazard',observedAt:fixedNow}),error=>error.statusCode===400);
   assert.equal(dataPlatform.reportAggregates('copper')[0].reporterCount,2);
   assert.throws(()=>dataPlatform.submitReport({reporterId:'one',resort:'copper',zone:'Resolution',kind:'condition',type:'stoke',observedAt:fixedNow}),error=>error.statusCode===429);
   assert.equal(dataPlatform.submitMovementBatch({deviceId:'one',resort:'copper',samples:[{edgeId:'resolution',window:fixedNow,durationSeconds:90}]}).published.length,0);
@@ -63,12 +84,17 @@ async function run(){
   assert.equal(dataPlatform.submitMovementBatch({deviceId:'four',resort:'copper',samples:[{edgeId:'resolution',window:fixedNow,durationSeconds:120}]}).published[0].medianSeconds,105);
   assert.throws(()=>dataPlatform.submitMovementBatch({deviceId:'invalid-sample',resort:'copper',samples:[null]}),error=>error.statusCode===400);
   assert.throws(()=>dataPlatform.submitMovementBatch({deviceId:'raw-location',resort:'copper',samples:[{edgeId:'resolution',window:fixedNow,durationSeconds:100,latitude:39.5,longitude:-106.1}]}),error=>error.statusCode===400);
+  const atomicPlatform=new DataPlatform({movementThreshold:2,now:()=>fixedNow});
+  atomicPlatform.ingest(adapter.source,adapter.fetch());
+  assert.throws(()=>atomicPlatform.submitMovementBatch({deviceId:'partial',resort:'copper',samples:[{edgeId:'resolution',window:fixedNow,durationSeconds:90},null]}),error=>error.statusCode===400);
+  assert.equal(atomicPlatform.movement.size,0);
+  assert.throws(()=>dataPlatform.submitOutcome({resort:'copper',route:'Resolution',rating:'fine',preferences:[]}),error=>error.statusCode===400);
+  assert.throws(()=>dataPlatform.submitOutcome({resort:'copper',route:'Resolution',rating:'fine',preferences:{ability:'beginner'}}),error=>error.statusCode===400);
+  assert.throws(()=>dataPlatform.submitOutcome({resort:'copper',route:'Resolution',rating:'fine',confidence:101}),error=>error.statusCode===400);
+  assert.throws(()=>atomicPlatform.submitMovementBatch({deviceId:'duplicate',resort:'copper',samples:[{edgeId:'resolution',window:fixedNow,durationSeconds:90},{edgeId:'resolution',window:fixedNow,durationSeconds:100}]}),error=>error.statusCode===400);
+  assert.equal(atomicPlatform.movement.size,0);
 
-  await Promise.race([
-    once(child.stdout,'data'),
-    once(child.stderr,'data').then(([data])=>{throw new Error(data.toString())}),
-    new Promise((_,reject)=>setTimeout(()=>reject(new Error('Server did not start')),3000))
-  ]);
+  await serverStarted;
 
   const home=await get('/');
   assert.equal(home.response.status,200);
@@ -81,8 +107,19 @@ async function run(){
   assert.match(home.body,/safety-engine\.js/);
   assert.match(home.body,/parking-model\.js/);
   assert.match(home.body,/parkingConfidence/);
+  assert.match(home.body,/role="tabpanel"/);
   assert.equal(home.response.headers.get('x-content-type-options'),'nosniff');
   assert.match(home.response.headers.get('content-security-policy'),/default-src 'self'/);
+
+  const health=await get('/healthz');
+  assert.equal(health.response.status,200);
+  assert.equal(JSON.parse(health.body).status,'ok');
+  assert.equal(health.response.headers.get('cache-control'),'no-store');
+  const readiness=await get('/readyz');
+  assert.equal(readiness.response.status,200);
+  assert.equal(JSON.parse(readiness.body).status,'ready');
+  const healthHead=await get('/healthz',{method:'HEAD'});
+  assert.equal(healthHead.response.status,200);
 
   const manifest=await get('/manifest.webmanifest');
   assert.equal(manifest.response.status,200);
@@ -99,6 +136,7 @@ async function run(){
   assert.equal(appAsset.response.status,200);
   assert.match(appAsset.body,/mountainpulse-sync-outbox/);
   assert.match(appAsset.body,/flushPrototypeOutbox/);
+  assert.match(appAsset.body,/updateRouteSessionUi/);
 
   const scoring=await get('/scoring.js');
   assert.equal(scoring.response.status,200);
@@ -187,6 +225,12 @@ async function run(){
 
   const readOnly=await get('/api/v1/resorts',{method:'POST'});
   assert.equal(readOnly.response.status,405);
+
+  const serverExit=once(child,'exit');
+  child.kill('SIGTERM');
+  const [exitCode,exitSignal]=await serverExit;
+  assert.equal(exitCode,0);
+  assert.equal(exitSignal,null);
 
   console.log('Static app and API smoke tests passed.');
 }

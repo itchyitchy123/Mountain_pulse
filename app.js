@@ -83,19 +83,28 @@ const conditionTypes={
 const scenarioLoadedAt=Date.now();
 let currentRecommendation=null, alternateIndex=0, selectedCondition='';
 
-function loadLocal(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}}
+function loadLocal(key,fallback){
+  try{
+    const value=JSON.parse(localStorage.getItem(key));
+    if(value===null)return fallback;
+    if(Array.isArray(fallback))return Array.isArray(value)?value:fallback;
+    if(fallback&&typeof fallback==='object')return value&&typeof value==='object'&&!Array.isArray(value)?value:fallback;
+    return typeof value===typeof fallback?value:fallback;
+  }catch{return fallback}
+}
+function loadRecords(key){return loadLocal(key,[]).filter(value=>value&&typeof value==='object'&&!Array.isArray(value))}
 function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
 function escapeHTML(value){return String(value).replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]))}
 function getReporterId(){let id=loadLocal('mountainpulse-reporter-id','');if(!id){id=globalThis.crypto?.randomUUID?.()||`device-${Date.now()}`;saveLocal('mountainpulse-reporter-id',id)}return id}
 const reporterId=getReporterId();
 
 function localSignalAdjustment(zone){
-  return MountainPulseScoring.calculateAdjustment(loadLocal('mountainpulse-signals',[]),{resort:current,zone});
+  return MountainPulseScoring.calculateAdjustment(loadRecords('mountainpulse-signals'),{resort:current,zone});
 }
 
 function trustedLocalReportCount(){
   const now=Date.now(),reporters=new Set();
-  loadLocal('mountainpulse-signals',[]).filter(signal=>signal.resort===current&&now-signal.observedAt>=0&&now-signal.observedAt<7200000).forEach(signal=>reporters.add(signal.reporterId||'legacy-device'));
+  loadRecords('mountainpulse-signals').filter(signal=>signal.resort===current&&now-signal.observedAt>=0&&now-signal.observedAt<7200000).forEach(signal=>reporters.add(signal.reporterId||'legacy-device'));
   return reporters.size;
 }
 
@@ -120,7 +129,7 @@ function renderResort(key,{announce=true}={}){
   $('#pulseFactors').innerHTML=Object.entries(resort.factors).map(([name,value])=>`<div><span>${name}</span><strong>${value}</strong></div>`).join('');
   $('#avoidArea').textContent=resort.avoid;
   $('#avoidReason').textContent=resort.avoidReason;
-  const localParking=loadLocal('mountainpulse-parking',[]).filter(report=>report.resort===key);
+  const localParking=loadRecords('mountainpulse-parking').filter(report=>report.resort===key);
   const parkingEstimate=MountainPulseParkingModel.estimateParking(resort.parking,localParking);
   $('#parkingCapacity').textContent=`${parkingEstimate.capacity}%`;
   $('#parkingMeter').style.width=`${parkingEstimate.capacity}%`;
@@ -129,7 +138,7 @@ function renderResort(key,{announce=true}={}){
   $('#parkingFull').textContent=resort.full;
   [$('#alpineLot'),$('#farEastLot'),$('#chapelLot')].forEach((element,index)=>element.textContent=`${resort.lots[index]}%`);
   [$('#lotName1'),$('#lotName2'),$('#lotName3')].forEach((element,index)=>element.textContent=meta.lots[index]);
-  const localCount=loadLocal('mountainpulse-signals',[]).filter(signal=>signal.resort===key&&Date.now()-signal.observedAt>=0&&Date.now()-signal.observedAt<7200000).length;
+  const localCount=loadRecords('mountainpulse-signals').filter(signal=>signal.resort===key&&Date.now()-signal.observedAt>=0&&Date.now()-signal.observedAt<7200000).length;
   $('#contributorCount').textContent=`${meta.contributors.toLocaleString()} simulated movement signals${localCount?` · ${localCount} saved locally`:''}`;
   document.querySelectorAll('.resort-menu button').forEach(button=>button.classList.toggle('active',button.dataset.key===key));
   renderOperations();
@@ -141,7 +150,7 @@ function renderResort(key,{announce=true}={}){
   alternateIndex=0;
   renderRecommendation();
   renderTravelAlert();
-  restoreRouteSession();
+  updateRouteSessionUi();
   closeResortMenu();
   if(announce) showToast(`${resort.short} live pulse loaded`);
 }
@@ -151,7 +160,7 @@ function renderChanges(){
 }
 
 function eligibleRecommendations(){
-  const reports=loadLocal('mountainpulse-signals',[]);
+  const reports=loadRecords('mountainpulse-signals');
   return MountainPulseRouteEngine.rankRoutes(recommendationOptions[current],{
     ability:$('#abilityPreference').value,
     ride:$('#ridePreference').value,
@@ -165,7 +174,7 @@ function eligibleRecommendations(){
 
 function localOutcomeAdjustment(route){
   const preferences={ability:$('#abilityPreference').value,ride:$('#ridePreference').value,priority:$('#priorityPreference').value};
-  const outcomes=loadLocal('mountainpulse-feedback',[]).filter(outcome=>outcome.resort===current&&(outcome.destination===route.destination||outcome.route===route.title)).slice(-20);
+  const outcomes=loadRecords('mountainpulse-feedback').filter(outcome=>outcome.resort===current&&(outcome.destination===route.destination||outcome.route===route.title)).slice(-20);
   if(!outcomes.length)return 0;
   const value=outcomes.reduce((sum,outcome)=>{
     const contextMatch=Object.entries(preferences).every(([key,value])=>outcome.preferences?.[key]===value);
@@ -177,7 +186,7 @@ function localOutcomeAdjustment(route){
 
 function confidenceSources(){
   const localReports=trustedLocalReportCount();
-  const outcomes=loadLocal('mountainpulse-feedback',[]).filter(outcome=>outcome.resort===current);
+  const outcomes=loadRecords('mountainpulse-feedback').filter(outcome=>outcome.resort===current);
   const outcomeQuality=outcomes.length?outcomes.reduce((sum,outcome)=>sum+(outcome.rating==='nailed'?1:(outcome.rating==='fine'?0.6:0.15)),0)/outcomes.length:0.45;
   return [
     ...['operations','weather','webcam','movement'].map(name=>({name,...MountainPulseData.sourceMeta[name]})),
@@ -197,6 +206,7 @@ function renderRecommendation(){
     $('#routeConfidence').innerHTML='<i></i> Route withheld';
     $('#routeButton').disabled=true;
     $('#sourceLedger').innerHTML='<div class="source-item"><strong>Safety constraint</strong><span>No route clears all hard filters</span><b>Withheld</b></div>';
+    updateRouteSessionUi();
     return;
   }
   currentRecommendation=option;
@@ -215,11 +225,12 @@ function renderRecommendation(){
   document.querySelectorAll('.route-node:not(.start)').forEach((node,index)=>node.textContent=(routeLegs[index]||'').split(/\s+/).map(word=>word[0]).join('').slice(0,2).toUpperCase());
   document.querySelectorAll('.zone').forEach(zone=>zone.classList.remove('route-active'));
   renderSourceLedger(option);
+  updateRouteSessionUi();
 }
 
 function renderSourceLedger(option){
   const saved=trustedLocalReportCount();
-  const outcomes=loadLocal('mountainpulse-feedback',[]).filter(outcome=>outcome.resort===current);
+  const outcomes=loadRecords('mountainpulse-feedback').filter(outcome=>outcome.resort===current);
   const nailed=outcomes.filter(outcome=>outcome.rating==='nailed').length;
   const adjustment=localSignalAdjustment(option.destination);
   const outcomeAdjustment=localOutcomeAdjustment(option);
@@ -278,7 +289,7 @@ function renderReports(){
     ['🌬',powder[2][0],powder[2][2],'simulated community scenario','Watch wind'],
     ['⚠️',powder[3][0],powder[3][2],'8 min ago · simulated model','Use caution']
   ];
-  const localReports=loadLocal('mountainpulse-signals',[])
+  const localReports=loadRecords('mountainpulse-signals')
     .filter(signal=>signal.resort===current&&Date.now()-signal.observedAt<7200000)
     .sort((a,b)=>b.observedAt-a.observedAt)
     .map(signal=>{const condition=conditionTypes[signal.condition];return [condition?.emoji||(signal.type==='stoke'?'🔥':'💀'),signal.zone,condition?`${condition.label} · ${signal.type==='stoke'?'Stoke':'Don’t bother'}`:signal.type==='stoke'?'Local Stoke signal':'Local warning signal',formatAge(signal.observedAt),'Saved locally']});
@@ -330,7 +341,7 @@ function showToast(message){
 }
 
 function enqueuePrototypeSync(path,payload){
-  const queue=loadLocal('mountainpulse-sync-outbox',[]);
+  const queue=loadRecords('mountainpulse-sync-outbox');
   queue.push({id:globalThis.crypto?.randomUUID?.()||String(Date.now()),path,payload,queuedAt:Date.now()});
   saveLocal('mountainpulse-sync-outbox',queue.slice(-100));
 }
@@ -349,19 +360,23 @@ let flushingOutbox=false;
 async function flushPrototypeOutbox(){
   if(flushingOutbox||!navigator.onLine)return;
   flushingOutbox=true;
-  const queue=loadLocal('mountainpulse-sync-outbox',[]),remaining=[];
-  for(const item of queue){
-    const result=await syncPrototype(item.path,item.payload,{queueOnFailure:false});
-    if(!result.synced&&(result.status===429||!result.status||result.status>=500))remaining.push(item);
+  try{
+    const queue=loadRecords('mountainpulse-sync-outbox'),remaining=[];
+    for(const item of queue){
+      if(!item||typeof item.path!=='string'||!item.path.startsWith('/api/v1/'))continue;
+      const result=await syncPrototype(item.path,item.payload,{queueOnFailure:false});
+      if(!result.synced&&(result.status===429||!result.status||result.status>=500))remaining.push(item);
+    }
+    saveLocal('mountainpulse-sync-outbox',remaining);
+    if(queue.length&&!remaining.length)showToast('Offline reports synced');
+  }finally{
+    flushingOutbox=false;
   }
-  saveLocal('mountainpulse-sync-outbox',remaining);
-  flushingOutbox=false;
-  if(queue.length&&!remaining.length)showToast('Offline reports synced');
 }
 
 function submitReport(type){
   const success=$('#reportSuccess');
-  const signals=loadLocal('mountainpulse-signals',[]).filter(signal=>Date.now()-signal.observedAt<7200000);
+  const signals=loadRecords('mountainpulse-signals').filter(signal=>Date.now()-signal.observedAt<7200000);
   const zone=$('#reportZone').value;
   if(!zone){success.textContent='Choose the run or zone before sending a signal.';success.classList.add('show');showToast('Please confirm where you just rode');setTimeout(()=>success.classList.remove('show'),3000);return}
   if(signals.some(signal=>signal.resort===current&&Date.now()-signal.observedAt<10000)){showToast('Signal already saved — wait a few seconds before reporting again');return}
@@ -387,6 +402,9 @@ function submitReport(type){
 
 function startRouteSession(){
   if(!currentRecommendation)return;
+  const active=loadLocal('mountainpulse-active-route',null);
+  if(active?.resort===current&&active.route===currentRecommendation.title){showToast('This lap is already active');return}
+  if(active){showToast('Finish or rate your active lap before starting another');return}
   const session={
     id:globalThis.crypto?.randomUUID?.()||String(Date.now()),resort:current,route:currentRecommendation.title,destination:currentRecommendation.destination,
     confidence:currentRecommendation.calculatedConfidence,startedAt:Date.now(),preferences:{ability:$('#abilityPreference').value,ride:$('#ridePreference').value,priority:$('#priorityPreference').value}
@@ -397,18 +415,18 @@ function startRouteSession(){
   $('#routeButton').innerHTML='Route active <span>✓</span>';
 }
 
-function restoreRouteSession(){
+function updateRouteSessionUi(){
   const session=loadLocal('mountainpulse-active-route',null);
   if(!session||session.resort!==current){$('#routeFeedback').hidden=true;$('#routeButton').innerHTML='Start lap <span>→</span>';return}
   $('#feedbackRoute').textContent=`After you finish: ${session.route}`;
   $('#routeFeedback').hidden=false;
-  $('#routeButton').innerHTML='Route active <span>✓</span>';
+  $('#routeButton').innerHTML=currentRecommendation?.title===session.route?'Route active <span>✓</span>':'Start lap <span>→</span>';
 }
 
 function recordRouteFeedback(rating){
   const session=loadLocal('mountainpulse-active-route',null);
   if(!session){showToast('Start a route before rating it');return}
-  const outcomes=loadLocal('mountainpulse-feedback',[]);
+  const outcomes=loadRecords('mountainpulse-feedback');
   const outcome={...session,rating,completedAt:Date.now(),elapsedMinutes:Math.max(1,Math.round((Date.now()-session.startedAt)/60000))};
   outcomes.push(outcome);
   saveLocal('mountainpulse-feedback',outcomes.slice(-100));
@@ -429,6 +447,8 @@ function showOperations(panel){
   $('#runTab').classList.toggle('active',!lifts);
   $('#liftTab').setAttribute('aria-selected',lifts);
   $('#runTab').setAttribute('aria-selected',!lifts);
+  $('#liftTab').tabIndex=lifts?0:-1;
+  $('#runTab').tabIndex=lifts?-1:0;
 }
 
 function setLiftMode(enabled){
@@ -440,9 +460,9 @@ function setLiftMode(enabled){
 }
 
 const savedPreferences=loadLocal('mountainpulse-preferences',{ability:'advanced',ride:'ski',priority:'snow'});
-$('#abilityPreference').value=savedPreferences.ability;
-$('#ridePreference').value=savedPreferences.ride;
-$('#priorityPreference').value=savedPreferences.priority;
+$('#abilityPreference').value=['intermediate','advanced','expert'].includes(savedPreferences.ability)?savedPreferences.ability:'advanced';
+$('#ridePreference').value=['ski','snowboard'].includes(savedPreferences.ride)?savedPreferences.ride:'ski';
+$('#priorityPreference').value=['snow','quiet','fast'].includes(savedPreferences.priority)?savedPreferences.priority:'snow';
 $('#abasinReservation').checked=loadLocal('mountainpulse-abasin-reservation',false);
 renderStaticLists();
 renderResort('copper',{announce:false});
@@ -451,17 +471,25 @@ setLiftMode(loadLocal('mountainpulse-lift-mode',false));
 $('#resortPicker').addEventListener('click',()=>{
   const open=$('#resortMenu').classList.toggle('open');
   $('#resortPicker').setAttribute('aria-expanded',open);
+  if(open)($('#resortMenu .active')||$('#resortMenu button'))?.focus();
 });
-$('#resortMenu').addEventListener('click',event=>{const button=event.target.closest('button');if(button)renderResort(button.dataset.key)});
+$('#resortMenu').addEventListener('click',event=>{const button=event.target.closest('button');if(button){renderResort(button.dataset.key);$('#resortPicker').focus()}});
 $('#leaderboardList').addEventListener('click',event=>{const button=event.target.closest('button');if(button){renderResort(button.dataset.key);window.scrollTo({top:0,behavior:'smooth'})}});
 document.addEventListener('click',event=>{if(!event.target.closest('.resort-picker')&&!event.target.closest('.resort-menu'))closeResortMenu()});
-document.addEventListener('keydown',event=>{if(event.key==='Escape')closeResortMenu()});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){const menuOpen=$('#resortMenu').classList.contains('open');closeResortMenu();$('#zonePopover').hidden=true;if(menuOpen)$('#resortPicker').focus()}});
+$('#resortMenu').addEventListener('keydown',event=>{
+  if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+  event.preventDefault();
+  const items=[...$('#resortMenu').querySelectorAll('button')],index=items.indexOf(document.activeElement);
+  const next=event.key==='Home'?0:event.key==='End'?items.length-1:event.key==='ArrowDown'?(index+1)%items.length:(index-1+items.length)%items.length;
+  items[next]?.focus();
+});
 $('#liftTab').addEventListener('click',()=>showOperations('lifts'));
 $('#runTab').addEventListener('click',()=>showOperations('runs'));
 document.querySelector('.operation-tabs').addEventListener('keydown',event=>{
-  if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+  if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
   event.preventDefault();
-  const next=event.target===$('#liftTab')?$('#runTab'):$('#liftTab');
+  const next=event.key==='Home'?$('#liftTab'):event.key==='End'?$('#runTab'):event.target===$('#liftTab')?$('#runTab'):$('#liftTab');
   next.click();
   next.focus();
 });
@@ -524,7 +552,7 @@ $('#refreshMap').addEventListener('click',()=>{
 document.querySelector('.parking-report').addEventListener('click',event=>{
   const button=event.target.closest('button');
   if(button){
-    const reports=loadLocal('mountainpulse-parking',[]).filter(report=>Date.now()-report.observedAt<7200000);
+    const reports=loadRecords('mountainpulse-parking').filter(report=>Date.now()-report.observedAt<7200000);
     if(reports.some(report=>report.resort===current&&Date.now()-report.observedAt<30000)){showToast('Recent parking report already saved');return}
     reports.push({reporterId,resort:current,level:button.dataset.level,observedAt:Date.now()});
     const saved=saveLocal('mountainpulse-parking',reports.slice(-50));
