@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "description": "Real-time mountain intelligence for skiers",
+  "homepage": "https://github.com/itchyitchy123/Mountain_pulse#readme",
+  "bugs": {
+    "url": "https://github.com/itchyitchy123/Mountain_pulse/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/itchyitchy123/Mountain_pulse.git"
+  },
   "engines": {
     "node": ">=24 <25"
   },

@@ -1,10 +1,28 @@
 # MountainPulse
 
-A responsive, dependency-free prototype for real-time ski resort intelligence. All live values are simulated product data; the app does not claim to be connected to official resort feeds.
+[![CI](https://github.com/itchyitchy123/Mountain_pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/itchyitchy123/Mountain_pulse/actions/workflows/ci.yml)
+
+A responsive prototype for real-time ski resort intelligence with a zero-dependency browser client and a Node.js API. The default experience uses clearly labeled simulated data; the repository does not claim that official resort integrations are present.
+
+> [!IMPORTANT]
+> MountainPulse is not a source of official closure, patrol, avalanche, or emergency information. Production routing remains disabled until licensed topology and field safety validation are complete.
+
+## Project status
+
+The demo is runnable and the production runtime boundary is implemented: normalized HTTPS ingestion, PostgreSQL/PostGIS persistence, signed anonymous installation credentials, freshness-gated readiness, and fail-closed configuration. Official feeds, licensed topology, operational moderation, and field validation are still launch blockers.
+
+- [Implementation status](PLAN_STATUS.md)
+- [Production integration roadmap](PRODUCTION_ROADMAP.md)
+- [Operations runbook](docs/OPERATIONS.md)
+- [Repository setup checklist](docs/REPOSITORY_SETUP.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Run locally
 
 ```bash
+npm ci
 npm start
 ```
 
@@ -64,5 +82,15 @@ Available resort IDs are `abasin`, `loveland`, `copper`, `winter`, and `eldora`.
 The unversioned plan routes (for example `/resorts/abasin/pulse`) are also available as aliases.
 Every response includes `simulation: true` and separates the scenario's `observed_at` time from the HTTP `served_at` time. Set `CORS_ORIGIN` to restrict API access outside local development.
 
-Write routes use bounded JSON bodies, strict enums, per-reporter cooldowns, independent-reporter publication thresholds, and no raw-coordinate movement contract. Their storage is intentionally process-local until the PostgreSQL/PostGIS repository described in [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md) is deployed.
+Write routes use bounded JSON bodies, strict enums, per-reporter cooldowns, independent-reporter publication thresholds, and a no-raw-coordinate movement contract. Demo storage is process-local; production mode persists reports, route outcomes, and movement samples in PostgreSQL/PostGIS.
 Clients must send write requests with `Content-Type: application/json`; reports with timestamps outside the two-hour freshness window or more than five minutes in the future are rejected.
+
+## Development
+
+Run the same checks used by CI before opening a pull request:
+
+```bash
+npm run ci
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and [docs/OPERATIONS.md](docs/OPERATIONS.md) for production configuration, migrations, rollout, and incident procedures.
