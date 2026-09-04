@@ -9,8 +9,12 @@
   "packageManager": "npm@11.6.0",
   "scripts": {
     "start": "node server.js",
+    "migrate": "node scripts/migrate.js",
     "ci": "npm run check && npm test",
-    "check": "node --check mountain-data.js && node --check data-platform.js && node --check adapters/scenario-adapter.js && node --check scoring.js && node --check route-engine.js && node --check safety-engine.js && node --check parking-model.js && node --check app.js && node --check server.js && node --check service-worker.js",
+    "check": "node --check mountain-data.js && node --check data-platform.js && node --check adapters/scenario-adapter.js && node --check adapters/normalized-http-adapter.js && node --check installation-auth.js && node --check postgres-repository.js && node --check scripts/migrate.js && node --check scoring.js && node --check route-engine.js && node --check safety-engine.js && node --check parking-model.js && node --check app.js && node --check server-config.js && node --check server.js && node --check service-worker.js",
     "test": "node test.js"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
   }
 }

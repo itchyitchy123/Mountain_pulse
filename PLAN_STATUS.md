@@ -24,6 +24,7 @@ MountainPulse is currently an honest, simulated product prototype. It demonstrat
 - Normalized expiring observation platform, source-health endpoint, and scenario ingestion adapter matching the production adapter boundary.
 - Validated prototype write routes for condition/parking reports, route outcomes, and edge-level movement batches; report and movement publication require independent devices, reporter identifiers are immediately salted and hashed, and client/IP rate limits are enforced.
 - A PostgreSQL/PostGIS migration defines production entities, topology, observations, sources, reports, recommendation outcomes, and movement aggregates.
+- An optional production runtime now requires PostgreSQL, an HTTPS normalized-feed adapter, stable privacy hashing, signed anonymous installation credentials, restricted CORS, freshness-gated readiness, and durable report/outcome/movement writes.
 - Installable offline demo shell, responsive mobile interface, keyboard support, security headers, and public-file allowlisting.
 - Glove-friendly Lift Mode reduces the interface to the current move, alternative, warning, evidence, and outcome controls.
 
@@ -33,7 +34,7 @@ MountainPulse is currently an honest, simulated product prototype. It demonstrat
 - Weather-station, snowfall, webcam, CDOT incident, traction-law, and travel-time feeds.
 - Licensed geospatial trail/lift/gate topology and offline navigation tiles.
 - Opt-in, privacy-preserving anonymous skier movement ingestion.
-- Durable server-synchronized reports, reputation and moderation. The prototype now synchronizes to process-local storage with validation, cooldowns, deduplication, and minimum publication thresholds.
+- Reputation scoring and a human moderation workflow. PostgreSQL persistence, cross-instance report cooldowns, deduplication, and minimum publication thresholds are implemented; operational moderation remains external.
 - Calibrated historical models and field validation of waits, crowds, powder probability, and route quality.
 - Native background GPS, Watch/lock-screen delivery, haptics, and battery measurement.
 

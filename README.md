@@ -20,6 +20,12 @@ docker run --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   -p 4173:4173 mountainpulse
 ```
 
+## Production runtime
+
+Production mode fails closed: it requires PostgreSQL, an HTTPS normalized observation feed, an explicit CORS origin, and separate installation-signing and identity-hashing secrets. Copy `.env.example` into your secret/configuration system, apply the schema with `npm run migrate`, and start with `APP_MODE=production`. Limit the initial rollout with `RESORT_IDS=copper`; readiness remains unavailable until every required snapshot for each enabled resort is fresh.
+
+The normalized feed must return `application/json` containing either an observation array or `{ "observations": [...] }`. Each observation uses the adapter contract in [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md). Production writes are persisted to PostgreSQL and require an anonymous signed installation credential issued by `POST /api/v1/installations`.
+
 The prototype includes resort switching, explained pulse scores, a mountain heat map, lift and run status, powder probability, parking estimates, personalized route recommendations, an I-70 trip outlook, and one-tap Stoke / Don't Bother reporting with all eight condition categories from the product plan. Parking reports now feed a time-decayed estimate and increase its displayed evidence confidence instead of acting as a disconnected label.
 
 The UI now distinguishes every modeled value from a real feed. Recommendations adapt to ability, skis versus snowboard, and the skier's priority; unavailable routes are excluded, serious terrain carries warnings, and “Start lap” highlights a destination and begins a local feedback session. Reports expire after two hours and remain available in the current browser for offline use. When connected, reports and outcomes are also sent to the in-memory prototype aggregation API; public aggregates require independent reporters. Failed/offline submissions enter a bounded device-local outbox and retry when connectivity returns. Recent local reports apply a time-decayed personal overlay capped at ±8 points to Powder Probability, heat zones, and snow-priority route ordering.
@@ -59,3 +65,4 @@ The unversioned plan routes (for example `/resorts/abasin/pulse`) are also avail
 Every response includes `simulation: true` and separates the scenario's `observed_at` time from the HTTP `served_at` time. Set `CORS_ORIGIN` to restrict API access outside local development.
 
 Write routes use bounded JSON bodies, strict enums, per-reporter cooldowns, independent-reporter publication thresholds, and no raw-coordinate movement contract. Their storage is intentionally process-local until the PostgreSQL/PostGIS repository described in [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md) is deployed.
+Clients must send write requests with `Content-Type: application/json`; reports with timestamps outside the two-hour freshness window or more than five minutes in the future are rejected.

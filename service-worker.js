@@ -1,4 +1,4 @@
-const cacheName='mountainpulse-demo-v6';
+const cacheName='mountainpulse-demo-v8';
 const offlineAssets=['/','/index.html','/styles.css','/mountain-data.js','/scoring.js','/route-engine.js','/safety-engine.js','/parking-model.js','/app.js','/manifest.webmanifest','/icon.svg'];
 const cacheablePaths=new Set(offlineAssets);
 

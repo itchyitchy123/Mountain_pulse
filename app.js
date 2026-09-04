@@ -80,8 +80,8 @@ const conditionTypes={
   fresh:{emoji:'❄️',label:'Fresh'},untracked:{emoji:'🔥',label:'Untracked'},icy:{emoji:'🧊',label:'Icy'},thin:{emoji:'🪨',label:'Thin coverage'},
   windblown:{emoji:'🌬',label:'Windblown'},moguls:{emoji:'🥔',label:'Moguls'},trees:{emoji:'🌲',label:'Good trees'},hazard:{emoji:'⚠️',label:'Hazard'}
 };
-const scenarioLoadedAt=Date.now();
-let currentRecommendation=null, alternateIndex=0, selectedCondition='';
+let enabledResortIds=Object.keys(resorts),dataLoadedAt=Date.now();
+let runtimeMode='demo',routingEnabled=true,installationAuthRequired=false,currentRecommendation=null,alternateIndex=0,selectedCondition='';
 
 function loadLocal(key,fallback){
   try{
@@ -139,7 +139,7 @@ function renderResort(key,{announce=true}={}){
   [$('#alpineLot'),$('#farEastLot'),$('#chapelLot')].forEach((element,index)=>element.textContent=`${resort.lots[index]}%`);
   [$('#lotName1'),$('#lotName2'),$('#lotName3')].forEach((element,index)=>element.textContent=meta.lots[index]);
   const localCount=loadRecords('mountainpulse-signals').filter(signal=>signal.resort===key&&Date.now()-signal.observedAt>=0&&Date.now()-signal.observedAt<7200000).length;
-  $('#contributorCount').textContent=`${meta.contributors.toLocaleString()} simulated movement signals${localCount?` · ${localCount} saved locally`:''}`;
+  $('#contributorCount').textContent=`${meta.contributors.toLocaleString()} ${runtimeMode==='production'?'reported':'simulated'} movement signals${localCount?` · ${localCount} saved locally`:''}`;
   document.querySelectorAll('.resort-menu button').forEach(button=>button.classList.toggle('active',button.dataset.key===key));
   renderOperations();
   renderPowder();
@@ -152,7 +152,7 @@ function renderResort(key,{announce=true}={}){
   renderTravelAlert();
   updateRouteSessionUi();
   closeResortMenu();
-  if(announce) showToast(`${resort.short} live pulse loaded`);
+  if(announce) showToast(`${resort.short} ${runtimeMode==='production'?'snapshot':'demo pulse'} loaded`);
 }
 
 function renderChanges(){
@@ -160,6 +160,7 @@ function renderChanges(){
 }
 
 function eligibleRecommendations(){
+  if(!routingEnabled)return [];
   const reports=loadRecords('mountainpulse-signals');
   return MountainPulseRouteEngine.rankRoutes(recommendationOptions[current],{
     ability:$('#abilityPreference').value,
@@ -201,7 +202,7 @@ function renderRecommendation(){
   if(!option){
     currentRecommendation=null;
     $('#moveTitle').textContent='No eligible route right now';
-    $('#moveReason').textContent='Every modeled option conflicts with your ability setting or current lift operations. Check official resort status.';
+    $('#moveReason').textContent=routingEnabled?'Every modeled option conflicts with your ability setting or current lift operations. Check official resort status.':'Routing is withheld until licensed topology and production safety validation are configured.';
     $('#waitTime').textContent='—';$('#skiTime').textContent='—';$('#vertical').textContent='—';
     $('#routeConfidence').innerHTML='<i></i> Route withheld';
     $('#routeButton').disabled=true;
@@ -250,6 +251,65 @@ function renderTravelAlert(){
   const offSeason=month>=5&&month<=8;
   const reservation=resortMeta[current].reservation;
   $('#travelAlert').innerHTML=`<strong>${offSeason?'Off-season demo':'Demo forecast'}</strong><span>${reservation?`${reservation} `:''}Connect current CDOT incidents, traction laws, and resort rules before departing.</span>`;
+}
+
+function applyCanonicalSnapshot(key,canonical,response){
+  if(!canonical||canonical.id!==key||!canonical.pulse||!canonical.conditions||!Array.isArray(canonical.lifts)||!Array.isArray(canonical.runs))throw new Error(`Incomplete snapshot for ${key}`);
+  const resort=resorts[key],conditions=canonical.conditions,pulse=canonical.pulse;
+  resort.name=canonical.name||resort.name;
+  resort.score=Number.isFinite(pulse.score)?pulse.score:resort.score;
+  resort.label=pulse.label||resort.label;
+  resort.temp=Number.isFinite(conditions.temperature_f)?`${conditions.temperature_f}°`:'—';
+  resort.snow=Number.isFinite(conditions.snow_24h_in)?`${conditions.snow_24h_in}″`:'—';
+  resort.wind=typeof conditions.wind==='string'?conditions.wind.replace(' mph',''):'—';
+  resort.terrain=Number.isFinite(conditions.terrain_open_pct)?`${conditions.terrain_open_pct}%`:'—';
+  if(pulse.factors)resort.factors={Snow:pulse.factors.snow,Crowds:pulse.factors.crowds,'Lift lines':pulse.factors.lift_lines,Terrain:pulse.factors.terrain,Wind:pulse.factors.wind};
+  resortMeta[key].feels=Number.isFinite(conditions.feels_like_f)?`Feels ${conditions.feels_like_f}°`:'Feels unavailable';
+  if(Number.isFinite(canonical.crowds?.contributors))resortMeta[key].contributors=canonical.crowds.contributors;
+  operations[key]=MountainPulseData.toUiOperations(canonical);
+  const sourceMode=response.source?.mode||'unknown';
+  ['operations','weather','movement'].forEach(name=>{MountainPulseData.sourceMeta[name].mode=sourceMode;MountainPulseData.sourceMeta[name].available=!response.stale;MountainPulseData.sourceMeta[name].freshness=response.stale?.1:1;MountainPulseData.sourceMeta[name].label=`${sourceMode} normalized feed`});
+}
+
+function showProductionUnavailable(){
+  routingEnabled=false;
+  Object.values(resorts).forEach(resort=>{resort.score='—';resort.label='Live data unavailable';resort.temp='—';resort.snow='—';resort.wind='—';resort.terrain='—'});
+  Object.keys(operations).forEach(key=>{operations[key]={count:'0/0 status available',lifts:[],runs:[]}});
+  renderStaticLists();
+  renderResort(current,{announce:false});
+  $('#updatedTime').textContent='Waiting for a fresh official snapshot';
+}
+
+async function refreshApiSnapshots(){
+  try{
+    const runtimeResponse=await fetch('/api/v1/runtime',{cache:'no-store'});
+    if(!runtimeResponse.ok)throw new Error(`Runtime endpoint returned ${runtimeResponse.status}`);
+    const runtime=await runtimeResponse.json();
+    runtimeMode=runtime.mode;
+    routingEnabled=Boolean(runtime.routing_enabled);
+    installationAuthRequired=Boolean(runtime.installation_auth_required);
+    enabledResortIds=Array.isArray(runtime.resort_ids)?runtime.resort_ids.filter(key=>Object.hasOwn(resorts,key)):Object.keys(resorts);
+    if(!enabledResortIds.length)throw new Error('Runtime has no supported resorts');
+    if(!enabledResortIds.includes(current))current=enabledResortIds[0];
+    $('#runtimeLabel').textContent=runtime.simulation?'Interactive winter demo':'Connected mountain data';
+    document.querySelector('.live-dot').classList.toggle('demo-dot',runtime.simulation);
+    const results=await Promise.all(enabledResortIds.map(async key=>{
+      const response=await fetch(`/api/v1/resorts/${encodeURIComponent(key)}`,{cache:'no-store'});
+      if(!response.ok)throw new Error(`${key} snapshot returned ${response.status}`);
+      const payload=await response.json();
+      if(!payload.simulation&&payload.stale)throw new Error(`${key} snapshot is stale`);
+      applyCanonicalSnapshot(key,payload.data,payload);
+      return payload;
+    }));
+    dataLoadedAt=Date.now();
+    const observed=results.map(result=>Date.parse(result.observed_at)).filter(Number.isFinite).sort((a,b)=>b-a)[0];
+    $('#updatedTime').textContent=observed?`Observed ${formatAge(observed).replace(' · this device','')}`:'Snapshot loaded now';
+    renderStaticLists();
+    renderResort(current,{announce:false});
+  }catch(error){
+    if(runtimeMode==='production')showProductionUnavailable();
+    console.warn('Mountain snapshot refresh failed',error);
+  }
 }
 
 function renderOperations(){
@@ -302,18 +362,18 @@ function formatAge(timestamp){
 }
 
 function renderLeaderboard(){
-  const ranked=Object.entries(resorts).sort((a,b)=>b[1].score-a[1].score);
+  const ranked=Object.entries(resorts).filter(([key])=>enabledResortIds.includes(key)).sort((a,b)=>b[1].score-a[1].score);
   $('#leaderboardList').innerHTML=ranked.map(([key,resort],index)=>`<button class="leaderboard-row ${key===current?'current':''}" data-key="${key}" aria-label="Load ${resort.name}, pulse ${resort.score}"><span>${index+1}</span><strong>${resort.short}</strong><b>${resort.score}${resort.score>90?' 🔥':''}</b></button>`).join('');
 }
 
 function renderStaticLists(){
-  $('#resortMenu').innerHTML=Object.entries(resorts).map(([key,resort])=>`<button role="menuitem" data-key="${key}" class="${key===current?'active':''}"><span>${resort.name}</span><small>${resort.score}</small></button>`).join('');
+  $('#resortMenu').innerHTML=Object.entries(resorts).filter(([key])=>enabledResortIds.includes(key)).map(([key,resort])=>`<button role="menuitem" data-key="${key}" class="${key===current?'active':''}"><span>${resort.name}</span><small>${resort.score}</small></button>`).join('');
   renderDestinations();
 }
 
 function renderDestinations(){
   const hasReservation=$('#abasinReservation').checked;
-  const ranked=[...destinations].sort((a,b)=>{
+  const ranked=destinations.filter(item=>enabledResortIds.includes(item.key)).sort((a,b)=>{
     const aEligible=a.key!=='abasin'||hasReservation;
     const bEligible=b.key!=='abasin'||hasReservation;
     return Number(bEligible)-Number(aEligible)||b.score-a.score;
@@ -349,7 +409,16 @@ function enqueuePrototypeSync(path,payload){
 async function syncPrototype(path,payload,{queueOnFailure=true}={}){
   if(!navigator.onLine){if(queueOnFailure)enqueuePrototypeSync(path,payload);return {synced:false,reason:'offline'};}
   try{
-    const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),keepalive:true});
+    let installationToken=loadLocal('mountainpulse-installation-token','');
+    if(installationAuthRequired&&!installationToken){
+      const installationResponse=await fetch('/api/v1/installations',{method:'POST',keepalive:true});
+      if(!installationResponse.ok)throw new Error('installation registration failed');
+      installationToken=(await installationResponse.json()).token||'';
+      if(!installationToken||!saveLocal('mountainpulse-installation-token',installationToken))throw new Error('installation token could not be retained');
+    }
+    const headers={'Content-Type':'application/json'};
+    if(installationToken)headers.Authorization=`Installation ${installationToken}`;
+    const response=await fetch(path,{method:'POST',headers,body:JSON.stringify(payload),keepalive:true});
     const result=await response.json().catch(()=>({}));
     if(!response.ok&&queueOnFailure&&(response.status===429||response.status>=500))enqueuePrototypeSync(path,payload);
     return response.ok?{synced:true,...result}:{synced:false,status:response.status,reason:result.message||`HTTP ${response.status}`};
@@ -362,13 +431,16 @@ async function flushPrototypeOutbox(){
   flushingOutbox=true;
   try{
     const queue=loadRecords('mountainpulse-sync-outbox'),remaining=[];
+    const attemptedIds=new Set(queue.map(item=>item.id));
     for(const item of queue){
       if(!item||typeof item.path!=='string'||!item.path.startsWith('/api/v1/'))continue;
       const result=await syncPrototype(item.path,item.payload,{queueOnFailure:false});
       if(!result.synced&&(result.status===429||!result.status||result.status>=500))remaining.push(item);
     }
-    saveLocal('mountainpulse-sync-outbox',remaining);
-    if(queue.length&&!remaining.length)showToast('Offline reports synced');
+    const queuedDuringFlush=loadRecords('mountainpulse-sync-outbox').filter(item=>!attemptedIds.has(item.id));
+    const finalQueue=[...remaining,...queuedDuringFlush].slice(-100);
+    saveLocal('mountainpulse-sync-outbox',finalQueue);
+    if(queue.length&&!finalQueue.length)showToast('Offline reports synced');
   }finally{
     flushingOutbox=false;
   }
@@ -467,6 +539,7 @@ $('#abasinReservation').checked=loadLocal('mountainpulse-abasin-reservation',fal
 renderStaticLists();
 renderResort('copper',{announce:false});
 setLiftMode(loadLocal('mountainpulse-lift-mode',false));
+refreshApiSnapshots();
 
 $('#resortPicker').addEventListener('click',()=>{
   const open=$('#resortMenu').classList.toggle('open');
@@ -562,7 +635,8 @@ document.querySelector('.parking-report').addEventListener('click',event=>{
   }
 });
 document.querySelector('.text-button').addEventListener('click',()=>showToast('All recent community reports are already shown'));
-setInterval(()=>{const minutes=Math.max(1,Math.floor((Date.now()-scenarioLoadedAt)/60000));$('#updatedTime').textContent=`Scenario loaded ${minutes} min ago`},30000);
+setInterval(()=>{const minutes=Math.max(1,Math.floor((Date.now()-dataLoadedAt)/60000));$('#updatedTime').textContent=`${runtimeMode==='production'?'Snapshot':'Scenario'} loaded ${minutes} min ago`},30000);
+setInterval(refreshApiSnapshots,60000);
 
 function updateConnectivity(){
   let banner=document.querySelector('.offline-banner');
