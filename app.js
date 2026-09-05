@@ -82,6 +82,7 @@ const conditionTypes={
 };
 let enabledResortIds=Object.keys(resorts),dataLoadedAt=Date.now();
 let runtimeMode='demo',routingEnabled=true,installationAuthRequired=false,currentRecommendation=null,alternateIndex=0,selectedCondition='';
+const communityAggregates={};
 
 function loadLocal(key,fallback){
   try{
@@ -126,7 +127,7 @@ function renderResort(key,{announce=true}={}){
   $('#snow').textContent=resort.snow;
   $('#wind').textContent=resort.wind;
   $('#openTerrain').textContent=resort.terrain;
-  $('#pulseFactors').innerHTML=Object.entries(resort.factors).map(([name,value])=>`<div><span>${name}</span><strong>${value}</strong></div>`).join('');
+  $('#pulseFactors').innerHTML=Object.entries(resort.factors).map(([name,value])=>`<div><span>${escapeHTML(name)}</span><strong>${escapeHTML(value)}</strong></div>`).join('');
   $('#avoidArea').textContent=resort.avoid;
   $('#avoidReason').textContent=resort.avoidReason;
   const localParking=loadRecords('mountainpulse-parking').filter(report=>report.resort===key);
@@ -150,9 +151,19 @@ function renderResort(key,{announce=true}={}){
   alternateIndex=0;
   renderRecommendation();
   renderTravelAlert();
+  renderDataTrust();
   updateRouteSessionUi();
   closeResortMenu();
   if(announce) showToast(`${resort.short} ${runtimeMode==='production'?'snapshot':'demo pulse'} loaded`);
+}
+
+function renderDataTrust(){
+  const age=Math.max(0,Math.floor((Date.now()-dataLoadedAt)/60000));
+  const mode=runtimeMode==='production'?'Connected snapshot':'Interactive demo scenario';
+  const detail=runtimeMode==='production'
+    ?`Observed data loaded ${age<1?'just now':`${age} min ago`}. Check official resort operations and patrol for closures, hazards, and emergencies.`
+    :'Every score, wait, and forecast is simulated. Use it to explore the experience—not to make real travel or terrain decisions.';
+  $('#dataTrust').innerHTML=`<strong>${mode}</strong><span>${detail}</span>`;
 }
 
 function renderChanges(){
@@ -243,7 +254,7 @@ function renderSourceLedger(option){
     ['Community reports',`${saved} local · ${saved?'under 2h old':'none yet'}`,adjustment?`${adjustment>0?'+':''}${adjustment} personal`:'No adjustment'],
     ['Outcome calibration',outcomes.length?`${outcomes.length} device ratings · ${Math.round(nailed/outcomes.length*100)}% nailed`:'No completed-route ratings',`${outcomeAdjustment>0?'+':''}${outcomeAdjustment} rank · ${option.calculatedConfidence}% combined`]
   ];
-  $('#sourceLedger').innerHTML=sources.map(([name,detail,confidence])=>`<div class="source-item"><strong>${name}</strong><span>${detail}</span><b>${confidence}</b></div>`).join('');
+  $('#sourceLedger').innerHTML=sources.map(([name,detail,confidence])=>`<div class="source-item"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(detail)}</span><b>${escapeHTML(confidence)}</b></div>`).join('');
 }
 
 function renderTravelAlert(){
@@ -299,6 +310,13 @@ async function refreshApiSnapshots(){
       const payload=await response.json();
       if(!payload.simulation&&payload.stale)throw new Error(`${key} snapshot is stale`);
       applyCanonicalSnapshot(key,payload.data,payload);
+      try{
+        const aggregatesResponse=await fetch(`/api/v1/resorts/${encodeURIComponent(key)}/reports`,{cache:'no-store'});
+        if(aggregatesResponse.ok){
+          const aggregatesPayload=await aggregatesResponse.json();
+          communityAggregates[key]=Array.isArray(aggregatesPayload.data)?aggregatesPayload.data:[];
+        }
+      }catch{communityAggregates[key]=communityAggregates[key]||[]}
       return payload;
     }));
     dataLoadedAt=Date.now();
@@ -315,8 +333,8 @@ async function refreshApiSnapshots(){
 function renderOperations(){
   const data=operations[current];
   $('#openCount').textContent=data.count;
-  $('#liftList').innerHTML=data.lifts.map(([name,area,wait,trend,level])=>`<div class="lift-row"><strong><span style="color:${wait==='Closed'||wait==='Wind hold'?'#db5347':'#11a36a'}">●</span> ${name}</strong><small>${area}</small><div class="lift-wait ${level}"><b>${wait}</b><span class="trend">${trend}</span></div></div>`).join('');
-  $('#runList').innerHTML=data.runs.map(([name,detail,status,state])=>`<div class="run-row"><strong>${name}</strong><small>${detail}</small><span class="status-pill ${state}">${status}</span></div>`).join('');
+  $('#liftList').innerHTML=data.lifts.map(([name,area,wait,trend,level])=>`<div class="lift-row"><strong><span style="color:${wait==='Closed'||wait==='Wind hold'?'#db5347':'#11a36a'}">●</span> ${escapeHTML(name)}</strong><small>${escapeHTML(area)}</small><div class="lift-wait ${escapeHTML(level)}"><b>${escapeHTML(wait)}</b><span class="trend">${escapeHTML(trend)}</span></div></div>`).join('');
+  $('#runList').innerHTML=data.runs.map(([name,detail,status,state])=>`<div class="run-row"><strong>${escapeHTML(name)}</strong><small>${escapeHTML(detail)}</small><span class="status-pill ${escapeHTML(state)}">${escapeHTML(status)}</span></div>`).join('');
 }
 
 function renderPowder(){
@@ -337,7 +355,7 @@ function renderHeatMap(){
     zone.querySelector('b').textContent=state==='hot'?'🔥':'●';
     zone.querySelector('span').innerHTML=`${name}<small>${score}</small>`;
   });
-  $('#reportZone').innerHTML='<option value="">Choose a zone</option>'+map.zones.map(([name])=>`<option value="${name}">${name}</option>`).join('');
+  $('#reportZone').innerHTML='<option value="">Choose a zone</option>'+map.zones.map(([name])=>`<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join('');
   $('#zonePopover').hidden=true;
 }
 
@@ -353,21 +371,36 @@ function renderReports(){
     .filter(signal=>signal.resort===current&&Date.now()-signal.observedAt<7200000)
     .sort((a,b)=>b.observedAt-a.observedAt)
     .map(signal=>{const condition=conditionTypes[signal.condition];return [condition?.emoji||(signal.type==='stoke'?'🔥':'💀'),signal.zone,condition?`${condition.label} · ${signal.type==='stoke'?'Stoke':'Don’t bother'}`:signal.type==='stoke'?'Local Stoke signal':'Local warning signal',formatAge(signal.observedAt),'Saved locally']});
-  $('#reportList').innerHTML=[...localReports,...modeledReports].map(([emoji,run,condition,meta,tag])=>`<div class="report-row"><div class="report-emoji">${escapeHTML(emoji)}</div><div><h3>${escapeHTML(run)}</h3><small>${escapeHTML(meta)}</small></div><p>${escapeHTML(condition)}</p><span class="report-tag ${tag==='Saved locally'?'local-signal':''}">${escapeHTML(tag)}</span></div>`).join('');
+  const verifiedReports=(communityAggregates[current]||[])
+    .filter(report=>report.kind==='condition'&&report.verified)
+    .sort((a,b)=>Date.parse(b.latestObservedAt)-Date.parse(a.latestObservedAt))
+    .map(report=>{
+      const condition=conditionTypes[report.condition];
+      const emoji=condition?.emoji||(report.type==='stoke'?'🔥':'💀');
+      const description=condition?`${condition.label} · ${report.type==='stoke'?'positive conditions':'use caution'}`:report.type==='stoke'?'Positive conditions':'Use caution';
+      return [emoji,report.zone,description,`${report.reporterCount} independent skier${report.reporterCount===1?'':'s'} · ${formatAggregateAge(report.latestObservedAt)}`,`Verified · ${report.reporterCount}`];
+    });
+  const scenarioReports=runtimeMode==='demo'?modeledReports:[];
+  const reports=[...localReports,...verifiedReports,...scenarioReports];
+  $('#reportList').innerHTML=reports.length?reports.map(([emoji,run,condition,meta,tag])=>`<div class="report-row"><div class="report-emoji">${escapeHTML(emoji)}</div><div><h3>${escapeHTML(run)}</h3><small>${escapeHTML(meta)}</small></div><p>${escapeHTML(condition)}</p><span class="report-tag ${tag==='Saved locally'?'local-signal':tag.startsWith('Verified')?'verified-signal':''}">${escapeHTML(tag)}</span></div>`).join(''):'<div class="empty-state"><strong>No corroborated reports yet</strong><span>Official conditions and operations remain the source of truth.</span></div>';
 }
 
 function formatAge(timestamp){
   const minutes=Math.max(0,Math.floor((Date.now()-timestamp)/60000));
   return minutes<1?'just now · this device':`${minutes} min ago · this device`;
 }
+function formatAggregateAge(timestamp){
+  const minutes=Math.max(0,Math.floor((Date.now()-Date.parse(timestamp))/60000));
+  return minutes<1?'just now':`${minutes} min ago`;
+}
 
 function renderLeaderboard(){
   const ranked=Object.entries(resorts).filter(([key])=>enabledResortIds.includes(key)).sort((a,b)=>b[1].score-a[1].score);
-  $('#leaderboardList').innerHTML=ranked.map(([key,resort],index)=>`<button class="leaderboard-row ${key===current?'current':''}" data-key="${key}" aria-label="Load ${resort.name}, pulse ${resort.score}"><span>${index+1}</span><strong>${resort.short}</strong><b>${resort.score}${resort.score>90?' 🔥':''}</b></button>`).join('');
+  $('#leaderboardList').innerHTML=ranked.map(([key,resort],index)=>`<button class="leaderboard-row ${key===current?'current':''}" data-key="${escapeHTML(key)}" aria-label="Load ${escapeHTML(resort.name)}, pulse ${escapeHTML(resort.score)}"><span>${index+1}</span><strong>${escapeHTML(resort.short)}</strong><b>${escapeHTML(resort.score)}${resort.score>90?' 🔥':''}</b></button>`).join('');
 }
 
 function renderStaticLists(){
-  $('#resortMenu').innerHTML=Object.entries(resorts).filter(([key])=>enabledResortIds.includes(key)).map(([key,resort])=>`<button role="menuitem" data-key="${key}" class="${key===current?'active':''}"><span>${resort.name}</span><small>${resort.score}</small></button>`).join('');
+  $('#resortMenu').innerHTML=Object.entries(resorts).filter(([key])=>enabledResortIds.includes(key)).map(([key,resort])=>`<button role="menuitem" data-key="${escapeHTML(key)}" class="${key===current?'active':''}"><span>${escapeHTML(resort.name)}</span><small>${escapeHTML(resort.score)}</small></button>`).join('');
   renderDestinations();
 }
 
@@ -385,6 +418,11 @@ function renderDestinations(){
     if(eligible)eligibleRank+=1;
     return `<div class="destination-row ${eligible&&eligibleRank===1?'winner':''} ${eligible?'':'ineligible'}"><span class="destination-rank">${eligible&&eligibleRank===1?'🏆':eligible?eligibleRank:'—'}</span><div class="destination-name"><strong>${resort.short}</strong><small>${eligible?`Arrive ${item.arrival}`:item.requirement}</small></div><div class="destination-metric"><small>Parking chance</small><b>${item.parking}</b></div><div class="destination-metric"><small>Snow score</small><b>${item.snow}</b></div><div class="destination-metric"><small>Crowds</small><b>${item.crowds}</b></div><span class="destination-score">${eligible?item.score:'Not eligible'}</span></div>`;
   }).join('');
+  const winner=ranked.find(item=>item.key!=='abasin'||hasReservation);
+  if(winner){
+    const destination=resorts[winner.key];
+    $('#tripDecision').innerHTML=`<span>Today’s call</span><strong>${escapeHTML(destination.short)}</strong><p>Best modeled balance of snow, arrival, parking, and crowds. <a href="#outlook">See the tradeoffs below</a>.</p>`;
+  }else $('#tripDecision').innerHTML='<span>Today’s call</span><strong>No eligible destination</strong><p>Enable a resort in the runtime configuration or confirm the required reservation.</p>';
 }
 
 function closeResortMenu(){
@@ -469,6 +507,7 @@ function submitReport(type){
   $('#contributorCount').textContent=`${resortMeta[current].contributors.toLocaleString()} simulated movement signals · ${localCount} saved locally`;
   selectedCondition='';
   document.querySelectorAll('#conditionPicker button').forEach(button=>{button.setAttribute('aria-pressed','false')});
+  $('#conditionHelp').textContent='Optional: add one condition to make your signal more useful.';
   setTimeout(()=>success.classList.remove('show'),4000);
 }
 
@@ -482,24 +521,50 @@ function startRouteSession(){
     confidence:currentRecommendation.calculatedConfidence,startedAt:Date.now(),preferences:{ability:$('#abilityPreference').value,ride:$('#ridePreference').value,priority:$('#priorityPreference').value}
   };
   saveLocal('mountainpulse-active-route',session);
+  $('#feedbackPrompt').textContent='Lap in progress';
   $('#feedbackRoute').textContent=`After you finish: ${session.route}`;
   $('#routeFeedback').hidden=false;
+  $('#finishRoute').hidden=false;
+  $('#feedbackActions').hidden=true;
   $('#routeButton').innerHTML='Route active <span>✓</span>';
 }
 
 function updateRouteSessionUi(){
   const session=loadLocal('mountainpulse-active-route',null);
-  if(!session||session.resort!==current){$('#routeFeedback').hidden=true;$('#routeButton').innerHTML='Start lap <span>→</span>';return}
-  $('#feedbackRoute').textContent=`After you finish: ${session.route}`;
+  if(!session||session.resort!==current){
+    $('#routeFeedback').hidden=true;
+    $('#finishRoute').hidden=false;
+    $('#feedbackActions').hidden=true;
+    $('#routeButton').innerHTML='Start lap <span>→</span>';
+    return;
+  }
+  const finished=Boolean(session.finishedAt);
+  $('#feedbackPrompt').textContent=finished?'How was that recommendation?':'Lap in progress';
+  $('#feedbackRoute').textContent=finished?session.route:`After you finish: ${session.route}`;
   $('#routeFeedback').hidden=false;
+  $('#finishRoute').hidden=finished;
+  $('#feedbackActions').hidden=!finished;
   $('#routeButton').innerHTML=currentRecommendation?.title===session.route?'Route active <span>✓</span>':'Start lap <span>→</span>';
+}
+
+function finishRouteSession(){
+  const session=loadLocal('mountainpulse-active-route',null);
+  if(!session){showToast('Start a route before finishing it');return}
+  if(!session.finishedAt){
+    session.finishedAt=Date.now();
+    saveLocal('mountainpulse-active-route',session);
+  }
+  updateRouteSessionUi();
+  $('#feedbackActions button')?.focus();
+  showToast('Lap finished — how was the recommendation?');
 }
 
 function recordRouteFeedback(rating){
   const session=loadLocal('mountainpulse-active-route',null);
   if(!session){showToast('Start a route before rating it');return}
+  if(!session.finishedAt){showToast('Finish the lap before rating this recommendation');return}
   const outcomes=loadRecords('mountainpulse-feedback');
-  const outcome={...session,rating,completedAt:Date.now(),elapsedMinutes:Math.max(1,Math.round((Date.now()-session.startedAt)/60000))};
+  const outcome={...session,rating,completedAt:session.finishedAt,elapsedMinutes:Math.max(1,Math.round((session.finishedAt-session.startedAt)/60000))};
   outcomes.push(outcome);
   saveLocal('mountainpulse-feedback',outcomes.slice(-100));
   try{localStorage.removeItem('mountainpulse-active-route')}catch{}
@@ -526,7 +591,7 @@ function showOperations(panel){
 function setLiftMode(enabled){
   document.body.classList.toggle('lift-mode',enabled);
   $('#liftModeButton').setAttribute('aria-pressed',String(enabled));
-  $('#liftModeButton').textContent=enabled?'Exit lift mode':'Lift mode';
+  $('#liftModeButton').textContent=enabled?'Exit on-mountain mode':'On-mountain mode';
   saveLocal('mountainpulse-lift-mode',enabled);
   if(enabled)document.querySelector('.best-move').scrollIntoView({block:'start'});
 }
@@ -573,8 +638,10 @@ $('#conditionPicker').addEventListener('click',event=>{
   const next=selectedCondition===button.dataset.condition?'':button.dataset.condition;
   selectedCondition=next;
   document.querySelectorAll('#conditionPicker button').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.condition===next)));
+  $('#conditionHelp').textContent=next?`${conditionTypes[next].label} selected. Send your signal when ready.`:'Optional: add one condition to make your signal more useful.';
 });
 $('#routeFeedback').addEventListener('click',event=>{const button=event.target.closest('[data-rating]');if(button)recordRouteFeedback(button.dataset.rating)});
+$('#finishRoute').addEventListener('click',finishRouteSession);
 $('#liftModeButton').addEventListener('click',()=>setLiftMode(!document.body.classList.contains('lift-mode')));
 [$('#abilityPreference'),$('#ridePreference'),$('#priorityPreference')].forEach(control=>control.addEventListener('change',()=>{
   alternateIndex=0;
@@ -635,7 +702,7 @@ document.querySelector('.parking-report').addEventListener('click',event=>{
   }
 });
 document.querySelector('.text-button').addEventListener('click',()=>showToast('All recent community reports are already shown'));
-setInterval(()=>{const minutes=Math.max(1,Math.floor((Date.now()-dataLoadedAt)/60000));$('#updatedTime').textContent=`${runtimeMode==='production'?'Snapshot':'Scenario'} loaded ${minutes} min ago`},30000);
+setInterval(()=>{const minutes=Math.max(1,Math.floor((Date.now()-dataLoadedAt)/60000));$('#updatedTime').textContent=`${runtimeMode==='production'?'Snapshot':'Scenario'} loaded ${minutes} min ago`;renderDataTrust()},30000);
 setInterval(refreshApiSnapshots,60000);
 
 function updateConnectivity(){

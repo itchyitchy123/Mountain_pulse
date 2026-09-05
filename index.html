@@ -52,6 +52,8 @@
           </div>
         </div>
 
+        <div class="data-trust" id="dataTrust" role="status"></div>
+
         <div class="pulse-banner">
           <div class="pulse-score-wrap">
             <div class="pulse-score" id="pulseScore">83</div>
@@ -65,7 +67,7 @@
       <section class="workspace">
         <div class="main-column">
           <article class="best-move card">
-            <div class="card-topline"><span class="eyebrow fire">🔥 Best move right now</span><div class="move-mode-actions"><span class="confidence" id="routeConfidence"><i></i> 78% model confidence</span><button class="lift-mode-button" id="liftModeButton" aria-pressed="false">Lift mode</button></div></div>
+            <div class="card-topline"><span class="eyebrow fire">🔥 Best move right now</span><div class="move-mode-actions"><span class="confidence" id="routeConfidence"><i></i> 78% model confidence</span><button class="lift-mode-button" id="liftModeButton" aria-pressed="false" title="Show a simplified, high-contrast view for the lift line">On-mountain mode</button></div></div>
             <div class="preference-bar" aria-label="Recommendation preferences">
               <label>Ability<select id="abilityPreference"><option value="intermediate">Intermediate</option><option value="advanced" selected>Advanced</option><option value="expert">Expert</option></select></label>
               <label>Ride<select id="ridePreference"><option value="ski" selected>Skis</option><option value="snowboard">Snowboard</option></select></label>
@@ -90,8 +92,9 @@
             <div class="avoid-bar"><span>!</span><p><strong id="avoidArea">Avoid Center Village</strong> <span id="avoidReason">for ~45 min — lines are building quickly.</span></p></div>
             <details class="source-ledger"><summary>Why this recommendation?</summary><div id="sourceLedger"></div></details>
             <div class="route-feedback" id="routeFeedback" hidden>
-              <div><strong>Was this recommendation worth it?</strong><small id="feedbackRoute"></small></div>
-              <div class="feedback-actions"><button data-rating="nailed">🔥 Nailed it</button><button data-rating="fine">👍 Fine</button><button data-rating="missed">💀 Missed</button></div>
+              <div><strong id="feedbackPrompt">Lap in progress</strong><small id="feedbackRoute"></small></div>
+              <button class="finish-route" id="finishRoute" type="button">Finish lap</button>
+              <div class="feedback-actions" id="feedbackActions" hidden><button data-rating="nailed">🔥 Nailed it</button><button data-rating="fine">👍 Fine</button><button data-rating="missed">💀 Missed</button></div>
             </div>
           </article>
 
@@ -146,6 +149,7 @@
               <div><span class="eyebrow">Denver → mountains</span><h2>Where should we go tomorrow?</h2></div>
               <span class="forecast-time">Demo for an 8:00 AM arrival</span>
             </div>
+            <div class="trip-decision" id="tripDecision" aria-live="polite"></div>
             <div class="departure-grid" aria-label="I-70 travel forecasts">
               <div class="recommended"><small>Example: leave 6:00 AM</small><strong>1h 36m</strong><span>Best modeled window</span></div>
               <div><small>Example: leave 6:30 AM</small><strong>2h 02m</strong><span>+26 min modeled traffic</span></div>
@@ -170,11 +174,13 @@
               <button data-condition="windblown" aria-pressed="false">🌬 Windblown</button><button data-condition="moguls" aria-pressed="false">🥔 Moguls</button>
               <button data-condition="trees" aria-pressed="false">🌲 Good trees</button><button data-condition="hazard" aria-pressed="false">⚠️ Hazard</button>
             </div>
+            <p class="condition-help" id="conditionHelp" aria-live="polite">Optional: add one condition to make your signal more useful.</p>
             <div class="report-actions">
               <button class="stoke" id="stokeButton"><span>🔥</span><b>This run is sick</b></button>
               <button class="bother" id="botherButton"><span>💀</span><b>Don’t bother</b></button>
             </div>
             <div class="report-success" id="reportSuccess" aria-live="polite"></div>
+            <p class="safety-note"><strong>Need help?</strong> Contact ski patrol or emergency services. Community signals are not monitored in real time.</p>
           </article>
 
           <article class="lifts card">

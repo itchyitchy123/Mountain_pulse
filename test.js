@@ -137,6 +137,11 @@ async function run(){
   assert.match(home.body,/parking-model\.js/);
   assert.match(home.body,/parkingConfidence/);
   assert.match(home.body,/role="tabpanel"/);
+  assert.match(home.body,/id="finishRoute"/);
+  assert.match(home.body,/Community signals are not monitored in real time/);
+  assert.match(home.body,/id="conditionHelp"/);
+  assert.match(home.body,/id="dataTrust"/);
+  assert.match(home.body,/id="tripDecision"/);
   assert.equal(home.response.headers.get('x-content-type-options'),'nosniff');
   assert.match(home.response.headers.get('content-security-policy'),/default-src 'self'/);
 
@@ -166,6 +171,9 @@ async function run(){
   assert.match(appAsset.body,/mountainpulse-sync-outbox/);
   assert.match(appAsset.body,/flushPrototypeOutbox/);
   assert.match(appAsset.body,/updateRouteSessionUi/);
+  assert.match(appAsset.body,/finishRouteSession/);
+  assert.match(appAsset.body,/communityAggregates/);
+  assert.match(appAsset.body,/renderDataTrust/);
 
   const scoring=await get('/scoring.js');
   assert.equal(scoring.response.status,200);

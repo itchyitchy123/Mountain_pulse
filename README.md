@@ -2,7 +2,21 @@
 
 [![CI](https://github.com/itchyitchy123/Mountain_pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/itchyitchy123/Mountain_pulse/actions/workflows/ci.yml)
 
-A responsive prototype for real-time ski resort intelligence with a zero-dependency browser client and a Node.js API. The default experience uses clearly labeled simulated data; the repository does not claim that official resort integrations are present.
+> Real-time ski resort intelligence prototype with Node.js, PostgreSQL/PostGIS, offline reporting, routing, and source-confidence modeling.
+
+<p align="center">
+  <img src="docs/mountainpulse-preview.svg" alt="MountainPulse dashboard preview showing mountain pulse, route recommendations, terrain heat map, and simulated source labeling" width="100%" />
+</p>
+
+MountainPulse is a responsive ski-resort intelligence prototype with a zero-dependency browser client and a Node.js API. It models the product boundary around live operations, geospatial persistence, explainable recommendations, community signals, and offline use—while keeping simulated data visibly separate from official sources.
+
+**GitHub About suggestion**
+
+Use this as the repository description:
+
+> Real-time ski resort intelligence prototype with Node.js, PostgreSQL/PostGIS, offline reporting, routing and source-confidence modeling.
+
+Suggested topics: `skiing` · `ski-resorts` · `nodejs` · `postgresql` · `postgis` · `pwa` · `geospatial` · `routing` · `offline-first` · `api` · `javascript`
 
 > [!IMPORTANT]
 > MountainPulse is not a source of official closure, patrol, avalanche, or emergency information. Production routing remains disabled until licensed topology and field safety validation are complete.
@@ -18,6 +32,18 @@ The demo is runnable and the production runtime boundary is implemented: normali
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
+
+## What is implemented
+
+| Area | Current boundary |
+| --- | --- |
+| Product | Resort switching, pulse scoring, terrain heat map, lift/run status, powder probability, parking, trip outlook, route recommendations, reporting, and Lift Mode |
+| Data | Shared normalized lift/run contracts, source provenance, freshness-gated readiness, scenario adapters, and bounded ingestion |
+| Persistence | PostgreSQL/PostGIS schema and repository adapters for observations, reports, route outcomes, and movement aggregates |
+| Safety | Fail-closed route constraints, hazard handling, source-confidence display, signed installation credentials, and no-raw-coordinate movement ingestion |
+| Offline | Installable PWA shell, cached demo experience, local report/session storage, bounded outbox, and retry on reconnect |
+
+The browser experience is deliberately useful as a product prototype without pretending to be a live resort feed. Production mode fails closed until licensed topology, official integrations, moderation, calibration, and field validation are supplied.
 
 ## Run locally
 

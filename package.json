@@ -2,7 +2,20 @@
   "name": "mountainpulse",
   "version": "1.0.0",
   "private": true,
-  "description": "Real-time mountain intelligence for skiers",
+  "description": "Real-time ski resort intelligence prototype with Node.js, PostgreSQL/PostGIS, offline reporting, routing and source-confidence modeling.",
+  "keywords": [
+    "skiing",
+    "ski-resorts",
+    "nodejs",
+    "postgresql",
+    "postgis",
+    "pwa",
+    "geospatial",
+    "routing",
+    "offline-first",
+    "api",
+    "javascript"
+  ],
   "homepage": "https://github.com/itchyitchy123/Mountain_pulse#readme",
   "bugs": {
     "url": "https://github.com/itchyitchy123/Mountain_pulse/issues"
